@@ -31,11 +31,27 @@ export async function connect(cfg: WeaviateConnConfig): Promise<WeaviateClient> 
   });
 }
 
+export interface SchemaOptions {
+  /**
+   * Whether to attach `reranker-transformers` to the CodeChunk collection.
+   * Skip this when running against a Weaviate that doesn't have the reranker
+   * module loaded — schema creation would 422 otherwise. The query-time
+   * `rerankerEnabled` flag in search config is independent: if you ever flip
+   * it on against a Weaviate without the module, the search code already has
+   * a graceful fallback. Defaults to true.
+   */
+  reranker?: boolean;
+}
+
 /**
  * Idempotently create the three collections. Safe to call on every server/ingest start.
  * If a collection already exists, it is left untouched (no destructive migration).
  */
-export async function ensureSchema(client: WeaviateClient): Promise<void> {
+export async function ensureSchema(
+  client: WeaviateClient,
+  opts: SchemaOptions = {},
+): Promise<void> {
+  const withReranker = opts.reranker ?? true;
   const existing = new Set((await client.collections.listAll()).map((c) => c.name));
 
   if (!existing.has(CODE_CHUNK)) {
@@ -46,7 +62,7 @@ export async function ensureSchema(client: WeaviateClient): Promise<void> {
         name: 'default',
         sourceProperties: ['content'],
       }),
-      reranker: reranker.transformers(),
+      ...(withReranker ? { reranker: reranker.transformers() } : {}),
       invertedIndex: configure.invertedIndex({
         indexNullState: true,
         indexPropertyLength: true,

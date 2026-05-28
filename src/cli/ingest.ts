@@ -296,7 +296,7 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
 
   const client = await connect(cfg.weaviate);
-  await ensureSchema(client);
+  await ensureSchema(client, { reranker: cfg.search.rerankerEnabled });
 
   const stateFile = resolve(cfg.ingest.stateFile);
   const state = await loadState(stateFile);

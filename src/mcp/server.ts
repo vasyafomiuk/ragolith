@@ -299,7 +299,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
 
 async function main(): Promise<void> {
   const client = await connect(cfg.weaviate);
-  await ensureSchema(client);
+  await ensureSchema(client, { reranker: cfg.search.rerankerEnabled });
   const server = await makeServer(client);
   const transport = new StdioServerTransport();
   await server.connect(transport);
