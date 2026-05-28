@@ -304,6 +304,33 @@ code {
   text-align: center;
 }
 
+/* Setup-needed banner shown across views when no ragc.config.json exists.
+   The `display: flex` on .banner would normally clobber the user-agent
+   `[hidden] { display: none }` rule because class selectors win on
+   specificity — declare the hidden override explicitly. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text);
+}
+.banner[hidden] {
+  display: none;
+}
+.banner-text {
+  line-height: 1.5;
+}
+.banner-text strong {
+  margin-right: 4px;
+}
+
 /* ---------- Cards / tables ---------- */
 
 .card {

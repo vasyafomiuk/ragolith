@@ -38,6 +38,33 @@ async function api(path, init) {
   return text ? JSON.parse(text) : {};
 }
 
+// ----- first-run state -----------------------------------------------------
+//
+// On every navigation we re-check /api/config to know whether a
+// ragc.config.json exists. If not, we surface a setup banner on every view
+// except #config itself, and (one time per session) auto-redirect a fresh
+// visit to #config so a new user lands directly in the editor.
+
+let configExists = null; // null = unknown, then true/false
+let autoRedirected = false;
+
+async function refreshConfigPresence() {
+  try {
+    const c = await api('/api/config');
+    configExists = !!c.exists;
+  } catch {
+    configExists = null; // unknown — treat as ok, don't false-positive
+  }
+  applySetupBanner();
+}
+
+function applySetupBanner() {
+  const banner = $('setup-banner');
+  if (!banner) return;
+  const onConfig = (window.location.hash || '').startsWith('#config');
+  banner.hidden = !(configExists === false && !onConfig);
+}
+
 // ----- routing --------------------------------------------------------------
 
 const VIEWS = ['projects', 'search', 'project', 'config', 'health'];
@@ -56,6 +83,17 @@ async function route() {
   let hash = window.location.hash.replace(/^#/, '') || 'projects';
   // legacy default route
   if (hash === 'home') hash = 'projects';
+
+  // First-run redirect: if this is a fresh tab AND the config file doesn't
+  // exist, drop the user straight into #config. We only do this once per
+  // session so they can still navigate away to #projects / #health.
+  if (configExists === null) await refreshConfigPresence();
+  if (configExists === false && !autoRedirected && hash === 'projects') {
+    autoRedirected = true;
+    window.location.hash = '#config';
+    return;
+  }
+  applySetupBanner();
 
   if (hash.startsWith('project/')) {
     const name = decodeURIComponent(hash.slice('project/'.length));
@@ -300,11 +338,32 @@ async function loadConfig() {
   try {
     const { path, config, exists } = await api('/api/config');
     configState = config;
+    configExists = exists;
     $('config-path').textContent = path;
     fillForm(config);
     $('cfg-raw').value = JSON.stringify(config, null, 2);
-    status.textContent = exists ? '' : 'No file on disk yet — will be created on save';
-    status.className = 'status' + (exists ? '' : ' err');
+    // First-run vs editing-existing tone shift.
+    if (exists) {
+      $('config-title').textContent = 'Config';
+      $('config-lead').innerHTML =
+        'Editing <code id="config-path">' +
+        escape(path) +
+        '</code>. Saved changes take effect on the next <code>ragolith-ingest</code> / <code>ragolith-server</code> run.';
+      $('config-save-label').textContent = 'Save';
+      status.textContent = '';
+      status.className = 'status';
+    } else {
+      $('config-title').textContent = 'Welcome — let’s set up ragolith';
+      $('config-lead').innerHTML =
+        'No config file on disk yet. Fill in the form below and click ' +
+        '<strong>Create config</strong> to write <code>' +
+        escape(path) +
+        '</code>. After that you can run <code>ragolith-ingest</code> to populate the index.';
+      $('config-save-label').textContent = 'Create config';
+      status.textContent = '';
+      status.className = 'status';
+    }
+    applySetupBanner();
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
     status.className = 'status err';
@@ -508,8 +567,15 @@ $('config-save').addEventListener('click', async () => {
       body: JSON.stringify(next),
     });
     configState = next;
-    status.textContent = `Saved · ${r.path}`;
+    const wasNew = configExists === false;
+    configExists = true;
+    status.textContent = wasNew ? `Created · ${r.path}` : `Saved · ${r.path}`;
     status.className = 'status ok';
+    // Now that a file exists, switch the Config view's copy back to the
+    // editing tone and dismiss the global banner on other views.
+    $('config-title').textContent = 'Config';
+    $('config-save-label').textContent = 'Save';
+    applySetupBanner();
   } catch (err) {
     status.textContent = `Save failed: ${err.message}`;
     status.className = 'status err';

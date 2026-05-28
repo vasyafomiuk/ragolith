@@ -59,6 +59,17 @@
       </aside>
 
       <main class="main">
+        <!-- Setup banner: shown on every view when ragc.config.json doesn't
+             exist yet. app.js flips it on/off based on /api/config. -->
+        <div id="setup-banner" class="banner" hidden>
+          <div class="banner-text">
+            <strong>ragolith isn't configured yet.</strong>
+            Add a project (a git repo or local path) so <code>ragolith-ingest</code> has something
+            to index.
+          </div>
+          <a href="#config" class="btn btn-primary btn-sm">Start setup →</a>
+        </div>
+
         <!-- Projects -->
         <section id="view-projects" class="view" hidden>
           <header class="view-head">
@@ -133,15 +144,17 @@
         <!-- Config -->
         <section id="view-config" class="view" hidden>
           <header class="view-head">
-            <h1>Config</h1>
-            <p class="lead">
+            <h1 id="config-title">Config</h1>
+            <p class="lead" id="config-lead">
               Editing <code id="config-path">ragc.config.json</code>. Saved changes take effect on
               the next <code>ragolith-ingest</code> / <code>ragolith-server</code> run.
             </p>
           </header>
           <div class="config-toolbar">
             <button type="button" id="config-reload" class="btn btn-ghost">Reload from disk</button>
-            <button type="button" id="config-save" class="btn btn-primary">Save</button>
+            <button type="button" id="config-save" class="btn btn-primary">
+              <span id="config-save-label">Save</span>
+            </button>
             <span id="config-status" class="status"></span>
           </div>
           <div class="config-tabs">
