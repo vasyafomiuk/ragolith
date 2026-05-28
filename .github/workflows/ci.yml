@@ -40,6 +40,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build
+        # Build before tests so test smoke-checks that spawn dist/ binaries
+        # (e.g. tests/cli/init.test.ts) find the compiled output.
+        run: npm run build
+
       - name: Run unit tests
         # Fast pass with no coverage instrumentation — fails the build on any
         # actual test failure, before the slower coverage step runs.
@@ -58,9 +63,6 @@ jobs:
           name: coverage-node${{ matrix.node-version }}
           path: coverage/
           retention-days: 7
-
-      - name: Build
-        run: npm run build
 
   integration:
     # End-to-end test against a real Weaviate + embedder stack via docker compose.

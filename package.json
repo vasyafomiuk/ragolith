@@ -60,7 +60,7 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-dashboard-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run all",
-    "all": "npm run check:layers && npm run lint && npm run format:check && npm run typecheck && npm run coverage && npm run build",
+    "all": "npm run check:layers && npm run lint && npm run format:check && npm run typecheck && npm run build && npm run coverage",
     "test": "node scripts/test.mjs",
     "test:watch": "node scripts/test.mjs --watch",
     "test:integration": "node scripts/test.mjs --integration",
