@@ -34,16 +34,24 @@
     "node": ">=20"
   },
   "bin": {
-    "ragolith-server": "./dist/server.js",
-    "ragolith-ingest": "./dist/ingest.js",
-    "ragolith-backup": "./dist/backup.js"
+    "ragolith-server": "./dist/mcp/server.js",
+    "ragolith-ingest": "./dist/cli/ingest.js",
+    "ragolith-backup": "./dist/cli/backup.js"
+  },
+  "exports": {
+    ".": "./dist/core/index.js",
+    "./mcp/server": "./dist/mcp/server.js",
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "server": "tsx src/server.ts",
-    "ingest": "tsx src/ingest.ts",
-    "backup": "tsx src/backup.ts",
+    "test": "node scripts/test.mjs",
+    "test:watch": "node scripts/test.mjs --watch",
+    "check:layers": "node scripts/check-layers.mjs",
+    "server": "tsx src/mcp/server.ts",
+    "ingest": "tsx src/cli/ingest.ts",
+    "backup": "tsx src/cli/backup.ts",
     "weaviate:up": "docker compose up -d",
     "weaviate:down": "docker compose down",
     "weaviate:logs": "docker compose logs -f weaviate"

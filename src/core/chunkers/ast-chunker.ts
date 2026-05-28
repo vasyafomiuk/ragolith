@@ -15,7 +15,7 @@ import type {
   Language,
   SymbolKind,
   SymbolRecord,
-} from './types.js';
+} from '../types.js';
 
 export interface AstOptions {
   filePath: string;

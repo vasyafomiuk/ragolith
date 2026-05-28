@@ -9,7 +9,7 @@ import type {
   ChunkResult,
   CodeChunk,
   SymbolRecord,
-} from './types.js';
+} from '../types.js';
 
 export interface JavaOptions {
   filePath: string;

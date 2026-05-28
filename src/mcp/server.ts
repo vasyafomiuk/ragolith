@@ -10,10 +10,10 @@ import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Filters, type WeaviateClient } from 'weaviate-client';
-import { loadConfig } from './config.js';
-import { connect, ensureSchema, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from './weaviate-client.js';
-import { search } from './search.js';
-import type { IngestState, Language, SearchHit } from './types.js';
+import { loadConfig } from '../core/config.js';
+import { connect, ensureSchema, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from '../core/weaviate-client.js';
+import { search } from '../core/search.js';
+import type { IngestState, Language, SearchHit } from '../core/types.js';
 
 const cfg = loadConfig();
 

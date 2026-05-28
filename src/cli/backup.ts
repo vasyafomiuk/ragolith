@@ -7,7 +7,7 @@
 
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
-import { loadConfig } from './config.js';
+import { loadConfig } from '../core/config.js';
 
 const program = new Command();
 program

@@ -5,7 +5,7 @@
 // stored procedures cleanly separated.
 
 import { chunkFallback } from './chunker.js';
-import type { ChunkResult, CodeChunk } from './types.js';
+import type { ChunkResult, CodeChunk } from '../types.js';
 
 export interface SqlOptions {
   filePath: string;

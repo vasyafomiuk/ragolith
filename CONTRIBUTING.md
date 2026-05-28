@@ -17,14 +17,52 @@ npm run server           # spin up the MCP server (stdio)
 
 ## Project layout
 
-See the **Components** table in the [README](README.md). One responsibility per file; the contracts between them are the types in [`src/types.ts`](src/types.ts).
+```
+src/
+├── core/          ← pure library: types, config, weaviate schema, search, chunkers
+│   └── chunkers/  ← one file per language + a dispatch function
+├── mcp/           ← MCP-over-stdio adapter (server.ts only)
+└── cli/           ← ingest + backup CLIs
+```
+
+**Layering rules**, enforced by `npm run check:layers`:
+- `core/` MUST NOT import from `mcp/` or `cli/`.
+- `mcp/` MUST NOT import from `cli/` (and vice versa).
+- `core/` is the only thing exported by the `exports` map in [`package.json`](package.json) — treat reaching into a sub-path as internal.
+
+When in doubt, the contracts between layers are the types in [`src/core/types.ts`](src/core/types.ts).
 
 ## Before you open a PR
 
 ```bash
+npm run check:layers     # must pass — no inter-layer leaks
 npm run typecheck        # must pass
+npm test                 # must pass
 npm run build            # must succeed
 ```
+
+CI runs all four on Node 20 and Node 22.
+
+## Tests
+
+The test suite uses Node's built-in `node:test` runner — zero extra dependencies. Files live under `tests/`, mirroring `src/`:
+
+```
+tests/
+├── chunkers/                # one *.test.ts per chunker
+├── config.test.ts
+├── dispatch.test.ts
+├── file-reader.test.ts
+└── search.test.ts
+```
+
+Run a single test file directly:
+
+```bash
+node --import tsx --test tests/chunkers/sql-chunker.test.ts
+```
+
+Add tests for any new chunker or pure helper. Anything that needs Weaviate or the network goes behind an `// integration:` tag — keep `npm test` fast (currently <1s).
 
 If your change touches the search pipeline or chunkers, please describe the index/query you tested it against in the PR body. A 10-line reproducer is worth more than a long argument.
 

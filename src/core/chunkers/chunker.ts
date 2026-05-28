@@ -2,7 +2,7 @@
 // or when an AST parse fails. ~4000 chars per chunk with 4-line overlap so a
 // function that straddles a boundary still appears in both chunks.
 
-import type { ChunkResult, CodeChunk, Language } from './types.js';
+import type { ChunkResult, CodeChunk, Language } from '../types.js';
 
 const TARGET_CHARS = 4000;
 const OVERLAP_LINES = 4;

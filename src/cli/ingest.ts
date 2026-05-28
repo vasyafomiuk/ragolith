@@ -21,25 +21,20 @@ import {
   type WeaviateField,
 } from 'weaviate-client';
 
-import { loadConfig } from './config.js';
-import { connect, ensureSchema, deleteFiles, deleteProject, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from './weaviate-client.js';
-import { syncRepo, changedFiles, joinRepo } from './git-manager.js';
-import { detectLanguage, readSourceFile } from './file-reader.js';
-import { chunkAst } from './ast-chunker.js';
-import { chunkJava } from './java-chunker.js';
-import { chunkCSharp } from './csharp-chunker.js';
-import { chunkSql } from './sql-chunker.js';
-import { chunkFallback, applyProjectPrefix } from './chunker.js';
+import { loadConfig } from '../core/config.js';
+import { connect, ensureSchema, deleteFiles, deleteProject, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from '../core/weaviate-client.js';
+import { syncRepo, changedFiles, joinRepo } from '../core/git-manager.js';
+import { detectLanguage, readSourceFile } from '../core/file-reader.js';
+import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
 import type {
   CallEdge,
   ChunkResult,
   CodeChunk,
   IngestState,
-  Language,
   ProjectConfig,
   FileConfig,
   SymbolRecord,
-} from './types.js';
+} from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
 // Under module:NodeNext the default-import dance confuses TS into seeing it as
@@ -53,27 +48,6 @@ const ignoreRequire = createRequire(import.meta.url);
 const ignore: () => IgnoreInst = ignoreRequire('ignore');
 
 const BATCH_SIZE = 200;
-
-function pickChunker(
-  content: string,
-  filePath: string,
-  project: string,
-  language: Language,
-): ChunkResult {
-  switch (language) {
-    case 'typescript':
-    case 'javascript':
-      return chunkAst(content, { filePath, project, language });
-    case 'java':
-      return chunkJava(content, { filePath, project });
-    case 'csharp':
-      return chunkCSharp(content, { filePath, project });
-    case 'sql':
-      return chunkSql(content, { filePath, project });
-    default:
-      return chunkFallback(content, { filePath, project, language });
-  }
-}
 
 async function loadGitignore(root: string): Promise<IgnoreInst> {
   const ig = ignore();
@@ -181,7 +155,12 @@ async function ingestFiles(
     if (language === 'unknown') { skipped++; continue; }
     const result = await readSourceFile(absPath, maxBytes);
     if (!result) { skipped++; continue; }
-    const chunked = pickChunker(result.content, storedPath, project, result.language);
+    const chunked = pickChunker({
+      content: result.content,
+      filePath: storedPath,
+      project,
+      language: result.language,
+    });
     if (commitSha) chunked.chunks.forEach((c) => { c.commit_sha = commitSha; });
     const prefixed = applyProjectPrefix(chunked, project);
     buffers.chunks.push(...prefixed.chunks);
