@@ -18,10 +18,10 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, resetConfigCache } from '../core/config.js';
 import type {
   BackupConfig,
-  FileConfig,
+  DocumentConfig,
   IngestConfig,
-  ProjectConfig,
   RagolithConfig,
+  RepoConfig,
   SearchConfig,
   WeaviateConnConfig,
 } from '../core/types.js';
@@ -32,8 +32,8 @@ export interface WizardAnswers {
   weaviate: WeaviateConnConfig;
   ingest: IngestConfig;
   search: SearchConfig;
-  projects: ProjectConfig[];
-  files: FileConfig[];
+  repos: RepoConfig[];
+  documents: DocumentConfig[];
   backup: BackupConfig;
 }
 
@@ -80,8 +80,8 @@ export function defaultAnswers(): WizardAnswers {
       diversityPerFile: 3,
       rerankerEnabled: true,
     },
-    projects: [],
-    files: [],
+    repos: [],
+    documents: [],
     backup: { backend: 'filesystem' },
   };
 }
@@ -92,8 +92,8 @@ export function buildConfig(answers: WizardAnswers): RagolithConfig {
     weaviate: answers.weaviate,
     ingest: answers.ingest,
     search: answers.search,
-    projects: answers.projects,
-    files: answers.files,
+    repos: answers.repos,
+    documents: answers.documents,
     backup: answers.backup,
   };
 }
@@ -133,39 +133,39 @@ async function runWizard(rl: Interface): Promise<WizardAnswers> {
   answers.weaviate.grpcPort = await askInt(rl, '  gRPC port', answers.weaviate.grpcPort);
   answers.weaviate.secure = await askYesNo(rl, '  Use TLS (https)?', answers.weaviate.secure);
 
-  process.stderr.write('\nProjects to index (leave name blank to stop):\n');
+  process.stderr.write('\nRepositories to index (leave name blank to stop):\n');
   for (let i = 1; ; i++) {
-    const name = await ask(rl, `  Project ${i} name (blank to finish)`);
+    const name = await ask(rl, `  Repo ${i} name (blank to finish)`);
     if (!name) break;
     const useLocal = await askYesNo(rl, '    Use a local path (instead of a git URL)?', false);
-    const project: ProjectConfig = { name };
+    const repo: RepoConfig = { name };
     if (useLocal) {
-      project.localPath = resolve(await ask(rl, '    Local path'));
+      repo.localPath = resolve(await ask(rl, '    Local path'));
     } else {
-      project.repo = await ask(rl, '    Git repo URL');
-      project.branch = await ask(rl, '    Branch', 'main');
+      repo.repo = await ask(rl, '    Git repo URL');
+      repo.branch = await ask(rl, '    Branch', 'main');
       const tokenEnv = await ask(rl, '    Token env var (blank for none, default GIT_TOKEN)');
-      if (tokenEnv) project.tokenEnv = tokenEnv;
+      if (tokenEnv) repo.tokenEnv = tokenEnv;
     }
     const subPaths = await ask(
       rl,
       '    Sub-paths to index (comma-separated, blank for whole repo)',
     );
     if (subPaths) {
-      project.subPaths = subPaths
+      repo.subPaths = subPaths
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
     }
-    answers.projects.push(project);
+    answers.repos.push(repo);
   }
 
-  process.stderr.write('\nStandalone files (PDF/DOCX/TXT — leave name blank to stop):\n');
+  process.stderr.write('\nDocuments (PDF/DOCX/TXT — leave name blank to stop):\n');
   for (let i = 1; ; i++) {
-    const name = await ask(rl, `  File ${i} name (blank to finish)`);
+    const name = await ask(rl, `  Document ${i} name (blank to finish)`);
     if (!name) break;
     const path = resolve(await ask(rl, '    Absolute path'));
-    answers.files.push({ name, path });
+    answers.documents.push({ name, path });
   }
 
   process.stderr.write('\nSearch:\n');
@@ -261,8 +261,8 @@ async function main(): Promise<void> {
   resetConfigCache();
 
   process.stderr.write(`\n[ragolith-init] wrote ${outputPath}\n`);
-  process.stderr.write(`  projects: ${answers.projects.length}\n`);
-  process.stderr.write(`  files:    ${answers.files.length}\n`);
+  process.stderr.write(`  repos:     ${answers.repos.length}\n`);
+  process.stderr.write(`  documents: ${answers.documents.length}\n`);
   process.stderr.write('\nNext:\n');
   process.stderr.write('  1. docker compose up -d            # start Weaviate + embedder\n');
   process.stderr.write('  2. ragolith-ingest                 # populate the index\n');

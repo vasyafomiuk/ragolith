@@ -126,8 +126,8 @@ export function logout(userId: string): void {
           // and still exercises the BM25 + vector hybrid path.
           rerankerEnabled: false,
         },
-        projects: [{ name: 'fixture', localPath: repoDir, subPaths: ['src'] }],
-        files: [],
+        repos: [{ name: 'fixture', localPath: repoDir, subPaths: ['src'] }],
+        documents: [],
         backup: { backend: 'filesystem' },
       },
       null,

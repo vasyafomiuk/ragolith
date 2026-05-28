@@ -356,10 +356,8 @@ async function main(): Promise<void> {
   const state = await loadState(stateFile);
   const extensions = new Set(cfg.ingest.extensions.map((e) => e.toLowerCase()));
 
-  const projects = opts.project
-    ? cfg.projects.filter((p) => p.name === opts.project)
-    : cfg.projects;
-  const files = opts.file ? cfg.files.filter((f) => f.name === opts.file) : cfg.files;
+  const projects = opts.project ? cfg.repos.filter((p) => p.name === opts.project) : cfg.repos;
+  const files = opts.file ? cfg.documents.filter((f) => f.name === opts.file) : cfg.documents;
 
   // Ensure the workDir exists before any clone attempts.
   await mkdir(resolve(cfg.ingest.workDir), { recursive: true });

@@ -22,37 +22,37 @@ describe('defaultAnswers', () => {
     assert.ok(Array.isArray(a.ingest.extensions));
     assert.ok(a.ingest.extensions.includes('.ts'));
     assert.equal(a.search.rerankerEnabled, true);
-    assert.deepEqual(a.projects, []);
-    assert.deepEqual(a.files, []);
+    assert.deepEqual(a.repos, []);
+    assert.deepEqual(a.documents, []);
     assert.equal(a.backup.backend, 'filesystem');
   });
 
   it('returns a fresh object each call (no shared mutable refs)', () => {
     const a = defaultAnswers();
     const b = defaultAnswers();
-    a.projects.push({ name: 'mutation' });
+    a.repos.push({ name: 'mutation' });
     a.ingest.extensions.push('.bogus');
-    assert.equal(b.projects.length, 0);
+    assert.equal(b.repos.length, 0);
     assert.ok(!b.ingest.extensions.includes('.bogus'));
   });
 });
 
 describe('buildConfig', () => {
-  it('passes user-supplied projects + files through verbatim', () => {
+  it('passes user-supplied repos + documents through verbatim', () => {
     const answers = defaultAnswers();
-    answers.projects.push({
+    answers.repos.push({
       name: 'my-app',
       repo: 'https://github.com/foo/my-app.git',
       branch: 'main',
       subPaths: ['src', 'docs'],
     });
-    answers.files.push({ name: 'spec', path: '/abs/spec.pdf' });
+    answers.documents.push({ name: 'spec', path: '/abs/spec.pdf' });
     const cfg: RagolithConfig = buildConfig(answers);
-    assert.equal(cfg.projects.length, 1);
-    assert.equal(cfg.projects[0]!.name, 'my-app');
-    assert.deepEqual(cfg.projects[0]!.subPaths, ['src', 'docs']);
-    assert.equal(cfg.files.length, 1);
-    assert.equal(cfg.files[0]!.path, '/abs/spec.pdf');
+    assert.equal(cfg.repos.length, 1);
+    assert.equal(cfg.repos[0]!.name, 'my-app');
+    assert.deepEqual(cfg.repos[0]!.subPaths, ['src', 'docs']);
+    assert.equal(cfg.documents.length, 1);
+    assert.equal(cfg.documents[0]!.path, '/abs/spec.pdf');
   });
 
   it('preserves rerankerEnabled flag changes', () => {
@@ -78,7 +78,7 @@ describe('ragolith-init --yes (smoke)', () => {
       assert.equal(r.status, 0, `expected exit 0, got ${r.status}. stderr:\n${r.stderr}`);
       const cfg = JSON.parse(await readFile(outPath, 'utf-8')) as RagolithConfig;
       assert.equal(cfg.weaviate.host, 'localhost');
-      assert.deepEqual(cfg.projects, []);
+      assert.deepEqual(cfg.repos, []);
       assert.ok(cfg.ingest.extensions.includes('.ts'));
     } finally {
       await rm(tmp, { recursive: true, force: true });

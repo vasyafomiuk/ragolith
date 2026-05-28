@@ -40,7 +40,8 @@ describe('loadConfig', () => {
     assert.equal(cfg.weaviate.httpPort, 8080);
     assert.equal(cfg.weaviate.grpcPort, 50051);
     assert.equal(cfg.search.diversityPerFile, 3);
-    assert.deepEqual(cfg.projects, []);
+    assert.deepEqual(cfg.repos, []);
+    assert.deepEqual(cfg.documents, []);
   });
 
   it('merges values from ragc.config.json on top of defaults', async () => {
@@ -48,7 +49,7 @@ describe('loadConfig', () => {
       join(tmp, 'ragc.config.json'),
       JSON.stringify({
         weaviate: { host: 'weaviate.example.com', httpPort: 9999 },
-        projects: [{ name: 'p1', repo: 'https://x/p1.git' }],
+        repos: [{ name: 'p1', repo: 'https://x/p1.git' }],
       }),
     );
     resetConfigCache();
@@ -57,8 +58,24 @@ describe('loadConfig', () => {
     assert.equal(cfg.weaviate.httpPort, 9999);
     // Untouched defaults are preserved.
     assert.equal(cfg.weaviate.grpcPort, 50051);
-    assert.equal(cfg.projects.length, 1);
-    assert.equal(cfg.projects[0]!.name, 'p1');
+    assert.equal(cfg.repos.length, 1);
+    assert.equal(cfg.repos[0]!.name, 'p1');
+  });
+
+  it('accepts legacy "projects"/"files" keys as aliases', async () => {
+    await writeFile(
+      join(tmp, 'ragc.config.json'),
+      JSON.stringify({
+        projects: [{ name: 'legacy-repo', repo: 'https://x/legacy.git' }],
+        files: [{ name: 'legacy-doc', path: '/abs/spec.pdf' }],
+      }),
+    );
+    resetConfigCache();
+    const cfg = loadConfig();
+    assert.equal(cfg.repos.length, 1);
+    assert.equal(cfg.repos[0]!.name, 'legacy-repo');
+    assert.equal(cfg.documents.length, 1);
+    assert.equal(cfg.documents[0]!.name, 'legacy-doc');
   });
 
   it('env vars override the file', async () => {

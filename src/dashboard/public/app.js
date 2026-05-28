@@ -972,15 +972,17 @@ function fillForm(cfg) {
   $('cfg-weaviate-grpc').value = cfg.weaviate?.grpcPort ?? 50051;
   $('cfg-weaviate-secure').checked = !!cfg.weaviate?.secure;
   $('cfg-search-reranker').checked = cfg.search?.rerankerEnabled !== false;
-  renderProjectsList(cfg.projects || []);
-  renderFilesList(cfg.files || []);
+  // Accept legacy keys so an existing ragc.config.json renders correctly
+  // until the user saves (which writes the canonical names back).
+  renderProjectsList(cfg.repos ?? cfg.projects ?? []);
+  renderFilesList(cfg.documents ?? cfg.files ?? []);
 }
 
 function renderProjectsList(items) {
   const list = $('cfg-projects-list');
   list.innerHTML = '';
   if (items.length === 0) {
-    list.innerHTML = '<div class="muted small">No projects yet — click "+ Add project".</div>';
+    list.innerHTML = '<div class="muted small">No repositories yet — click "+ Add repo".</div>';
     return;
   }
   items.forEach((p, idx) => {
@@ -989,7 +991,7 @@ function renderProjectsList(items) {
     div.dataset.idx = String(idx);
     div.innerHTML = `
       <div class="item-head">
-        <h3>project ${idx + 1}</h3>
+        <h3>repo ${idx + 1}</h3>
         <button type="button" class="btn btn-danger" data-remove-project="${idx}">Remove</button>
       </div>
       <div class="grid grid-2">
@@ -1009,7 +1011,7 @@ function renderFilesList(items) {
   const list = $('cfg-files-list');
   list.innerHTML = '';
   if (items.length === 0) {
-    list.innerHTML = '<div class="muted small">No standalone files — click "+ Add file".</div>';
+    list.innerHTML = '<div class="muted small">No documents — click "+ Add document".</div>';
     return;
   }
   items.forEach((f, idx) => {
@@ -1018,7 +1020,7 @@ function renderFilesList(items) {
     div.dataset.idx = String(idx);
     div.innerHTML = `
       <div class="item-head">
-        <h3>file ${idx + 1}</h3>
+        <h3>document ${idx + 1}</h3>
         <button type="button" class="btn btn-danger" data-remove-file="${idx}">Remove</button>
       </div>
       <div class="grid grid-2">
@@ -1042,8 +1044,14 @@ function collectFormToConfig() {
   base.search = base.search || { overFetch: 2, diversityPerFile: 3 };
   base.search.rerankerEnabled = $('cfg-search-reranker').checked;
 
-  // Projects: collect every .item child of #cfg-projects-list.
-  base.projects = [];
+  // Drop any legacy keys from `base` so the saved file ends up canonical.
+  delete base.projects;
+  delete base.files;
+
+  // Repos: collect every .item child of #cfg-projects-list. The selector +
+  // data-project-field attribute names are internal DOM ids that we keep for
+  // minimal churn — the JSON we *emit* uses the new canonical key.
+  base.repos = [];
   for (const el of document.querySelectorAll('#cfg-projects-list .item')) {
     const p = {};
     for (const input of el.querySelectorAll('[data-project-field]')) {
@@ -1059,10 +1067,10 @@ function collectFormToConfig() {
         p[field] = v;
       }
     }
-    if (p.name) base.projects.push(p);
+    if (p.name) base.repos.push(p);
   }
 
-  base.files = [];
+  base.documents = [];
   for (const el of document.querySelectorAll('#cfg-files-list .item')) {
     const f = {};
     for (const input of el.querySelectorAll('[data-file-field]')) {
@@ -1070,7 +1078,7 @@ function collectFormToConfig() {
       const v = input.value.trim();
       if (v) f[field] = v;
     }
-    if (f.name && f.path) base.files.push(f);
+    if (f.name && f.path) base.documents.push(f);
   }
 
   return base;
@@ -1103,18 +1111,18 @@ document.querySelectorAll('.config-tab').forEach((btn) => {
 
 $('cfg-add-project').addEventListener('click', () => {
   const cur = collectFormToConfig();
-  cur.projects = cur.projects || [];
-  cur.projects.push({ name: '', branch: 'main' });
+  cur.repos = cur.repos || [];
+  cur.repos.push({ name: '', branch: 'main' });
   configState = cur;
-  renderProjectsList(cur.projects);
+  renderProjectsList(cur.repos);
 });
 
 $('cfg-add-file').addEventListener('click', () => {
   const cur = collectFormToConfig();
-  cur.files = cur.files || [];
-  cur.files.push({ name: '', path: '' });
+  cur.documents = cur.documents || [];
+  cur.documents.push({ name: '', path: '' });
   configState = cur;
-  renderFilesList(cur.files);
+  renderFilesList(cur.documents);
 });
 
 document.addEventListener('click', (e) => {
@@ -1123,15 +1131,15 @@ document.addEventListener('click', (e) => {
   if (target.matches('[data-remove-project]')) {
     const idx = Number(target.getAttribute('data-remove-project'));
     const cur = collectFormToConfig();
-    cur.projects.splice(idx, 1);
+    cur.repos.splice(idx, 1);
     configState = cur;
-    renderProjectsList(cur.projects);
+    renderProjectsList(cur.repos);
   } else if (target.matches('[data-remove-file]')) {
     const idx = Number(target.getAttribute('data-remove-file'));
     const cur = collectFormToConfig();
-    cur.files.splice(idx, 1);
+    cur.documents.splice(idx, 1);
     configState = cur;
-    renderFilesList(cur.files);
+    renderFilesList(cur.documents);
   }
 });
 

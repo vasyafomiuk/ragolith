@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
     <title>ragolith dashboard</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -380,21 +381,29 @@
 
             <div class="card section">
               <h2 class="section-h">
-                Projects
+                Repositories
                 <button type="button" id="cfg-add-project" class="btn btn-ghost btn-sm">
-                  + Add project
+                  + Add repo
                 </button>
               </h2>
+              <p class="muted small">
+                Git URLs or local directories. Walked respecting <code>.gitignore</code> and chunked
+                by language. Incremental re-ingest tracked by commit SHA.
+              </p>
               <div id="cfg-projects-list" class="repeating"></div>
             </div>
 
             <div class="card section">
               <h2 class="section-h">
-                Standalone files
+                Documents
                 <button type="button" id="cfg-add-file" class="btn btn-ghost btn-sm">
-                  + Add file
+                  + Add document
                 </button>
               </h2>
+              <p class="muted small">
+                Standalone PDFs, DOCX, or text files. Read directly (no git). Incremental re-ingest
+                tracked by mtime.
+              </p>
               <div id="cfg-files-list" class="repeating"></div>
             </div>
           </div>

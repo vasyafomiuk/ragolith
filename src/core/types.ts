@@ -104,23 +104,46 @@ export interface SearchHit {
   score: number;
 }
 
-export interface ProjectConfig {
+/**
+ * One indexable repository — git clone (`repo`) or local directory
+ * (`localPath`). Walked respecting `.gitignore`, chunked by the
+ * language-specific dispatcher. Incremental tracking is via last-ingested
+ * commit SHA, stored in the ingest state file under `state.projects[name]`.
+ */
+export interface RepoConfig {
   name: string;
   repo?: string;
   /** Optional local path; takes precedence over repo if both are set. */
   localPath?: string;
   branch?: string;
-  /** One project entry can index multiple monorepo subdirectories. */
+  /** One repo entry can index multiple monorepo subdirectories. */
   subPaths?: string[];
   /** Token env var name; defaults to GIT_TOKEN. */
   tokenEnv?: string;
 }
 
-export interface FileConfig {
+/**
+ * One standalone document — read directly via the PDF/DOCX/UTF-8 reader, no
+ * git involved. Incremental tracking is via mtime in
+ * `state.files[name].mtime_ms`.
+ */
+export interface DocumentConfig {
   name: string;
-  /** Absolute path to a standalone file (e.g. a PDF spec). */
+  /** Absolute path to the document on disk. */
   path: string;
 }
+
+/**
+ * @deprecated Use {@link RepoConfig}. Kept as an alias so callers that
+ * imported the old name keep compiling; will be removed in a future major.
+ */
+export type ProjectConfig = RepoConfig;
+
+/**
+ * @deprecated Use {@link DocumentConfig}. Kept as an alias so callers that
+ * imported the old name keep compiling; will be removed in a future major.
+ */
+export type FileConfig = DocumentConfig;
 
 export interface WeaviateConnConfig {
   host: string;
@@ -156,8 +179,10 @@ export interface RagolithConfig {
   weaviate: WeaviateConnConfig;
   ingest: IngestConfig;
   search: SearchConfig;
-  projects: ProjectConfig[];
-  files: FileConfig[];
+  /** Git repositories (or local directories of code) to index. */
+  repos: RepoConfig[];
+  /** Standalone documents (PDF / DOCX / TXT / MD) to index. */
+  documents: DocumentConfig[];
   backup: BackupConfig;
 }
 

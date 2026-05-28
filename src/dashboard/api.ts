@@ -282,7 +282,7 @@ export function readConfig(): { path: string; exists: boolean; config: RagolithC
 }
 
 const CONFIG_SHAPE_HINT =
-  'expected an object with weaviate, ingest, search, projects[], files[], backup keys';
+  'expected an object with weaviate, ingest, search, repos[], documents[], backup keys';
 
 /** Validate + atomically write a new config to disk. Throws on shape errors. */
 export async function writeConfig(next: unknown): Promise<{ path: string }> {
@@ -294,11 +294,17 @@ export async function writeConfig(next: unknown): Promise<{ path: string }> {
     throw new Error(`config must be a JSON object — ${CONFIG_SHAPE_HINT}`);
   }
   const c = next as Record<string, unknown>;
-  if (c['projects'] !== undefined && !Array.isArray(c['projects'])) {
-    throw new Error('config.projects must be an array');
+  // `projects`/`files` still accepted as legacy aliases — loadConfig() will
+  // migrate them on the next read.
+  for (const key of ['repos', 'projects'] as const) {
+    if (c[key] !== undefined && !Array.isArray(c[key])) {
+      throw new Error(`config.${key} must be an array`);
+    }
   }
-  if (c['files'] !== undefined && !Array.isArray(c['files'])) {
-    throw new Error('config.files must be an array');
+  for (const key of ['documents', 'files'] as const) {
+    if (c[key] !== undefined && !Array.isArray(c[key])) {
+      throw new Error(`config.${key} must be an array`);
+    }
   }
   for (const k of ['weaviate', 'ingest', 'search', 'backup']) {
     const v = c[k];

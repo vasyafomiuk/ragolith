@@ -50,17 +50,51 @@ const DEFAULTS: RagolithConfig = {
     diversityPerFile: 3,
     rerankerEnabled: true,
   },
-  projects: [],
-  files: [],
+  repos: [],
+  documents: [],
   backup: {
     backend: 'filesystem',
   },
 };
 
+/**
+ * Accept legacy `projects` / `files` keys and map them onto the canonical
+ * `repos` / `documents` ones. Emits a single stderr line so users notice
+ * without breaking their setup.
+ *
+ * The deprecation warning fires per-process (deduped via a module-level
+ * flag) so a long-running dashboard server doesn't spam on every reload.
+ */
+let warnedLegacyKeys = false;
+function migrateLegacyKeys(raw: Partial<RagolithConfig> | undefined): typeof raw {
+  if (!raw) return raw;
+  const r = raw as Record<string, unknown>;
+  let migrated = false;
+  if (Array.isArray(r['projects']) && !Array.isArray(r['repos'])) {
+    r['repos'] = r['projects'];
+    delete r['projects'];
+    migrated = true;
+  }
+  if (Array.isArray(r['files']) && !Array.isArray(r['documents'])) {
+    r['documents'] = r['files'];
+    delete r['files'];
+    migrated = true;
+  }
+  if (migrated && !warnedLegacyKeys) {
+    warnedLegacyKeys = true;
+    process.stderr.write(
+      '[ragolith] ragc.config.json: "projects"/"files" are deprecated aliases — ' +
+        'canonical names are "repos"/"documents". Both still work.\n',
+    );
+  }
+  return raw;
+}
+
 function readJsonIfExists(path: string): Partial<RagolithConfig> | undefined {
   if (!existsSync(path)) return undefined;
   const raw = readFileSync(path, 'utf-8');
-  return JSON.parse(raw) as Partial<RagolithConfig>;
+  const parsed = JSON.parse(raw) as Partial<RagolithConfig>;
+  return migrateLegacyKeys(parsed);
 }
 
 function deepMerge<T>(base: T, over: Partial<T> | undefined): T {
@@ -126,4 +160,7 @@ export function loadConfig(): RagolithConfig {
 /** Reset the cache — used by tests and the CLI when -c is passed. */
 export function resetConfigCache(): void {
   cached = undefined;
+  // Reset the dedupe flag so tests can observe the deprecation warning
+  // path fresh between cases.
+  warnedLegacyKeys = false;
 }
