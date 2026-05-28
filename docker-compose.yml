@@ -13,10 +13,18 @@ services:
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
       PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
       DEFAULT_VECTORIZER_MODULE: text2vec-transformers
-      ENABLE_MODULES: text2vec-transformers,reranker-transformers,backup-filesystem,backup-s3
+      # Modules loaded at startup. backup-s3 is intentionally NOT in the default
+      # list — it requires BACKUP_S3_BUCKET to be set or Weaviate crashes on
+      # init. To enable: add 'backup-s3' here AND set BACKUP_S3_BUCKET below.
+      ENABLE_MODULES: text2vec-transformers,reranker-transformers,backup-filesystem
       TRANSFORMERS_INFERENCE_API: http://t2v-transformers:8080
       RERANKER_INFERENCE_API: http://reranker-transformers:8080
       BACKUP_FILESYSTEM_PATH: '/var/lib/weaviate-backups'
+      # Uncomment + set when enabling backup-s3:
+      # BACKUP_S3_BUCKET: your-bucket-name
+      # BACKUP_S3_REGION: us-east-1
+      # AWS_ACCESS_KEY_ID: ...
+      # AWS_SECRET_ACCESS_KEY: ...
       CLUSTER_HOSTNAME: 'node1'
     volumes:
       - weaviate_data:/var/lib/weaviate
