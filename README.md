@@ -1,9 +1,18 @@
-# ragolith
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="ragolith" width="520">
+  </picture>
+</p>
 
-[![CI](https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml/badge.svg)](https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js Version](https://img.shields.io/node/v/typescript)](package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](tsconfig.json)
+<p align="center">
+  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js Version"></a>
+  <a href="tsconfig.json"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript"></a>
+</p>
+
+# ragolith
 
 A RAG pipeline that indexes git repositories and documents into Weaviate, then exposes semantic search to LLM clients via **MCP (Model Context Protocol)** over stdio.
 
