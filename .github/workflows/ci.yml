@@ -40,7 +40,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test + coverage
+      - name: Run unit tests
+        # Fast pass with no coverage instrumentation — fails the build on any
+        # actual test failure, before the slower coverage step runs.
+        run: npm test
+
+      - name: Coverage gate
+        # Re-runs the same tests under c8 and enforces the thresholds in
+        # .c8rc.json. Separated so the CI page attributes a coverage drop
+        # vs a test failure to distinct steps.
         run: npm run coverage
 
       - name: Upload coverage report
