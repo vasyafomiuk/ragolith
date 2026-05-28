@@ -1,0 +1,24 @@
+{
+  "_comment": "c8 coverage config. Thresholds are strict — CI fails if any drops below. Excludes are files that are integration-only (need Weaviate/git/binaries) or are pure type declarations with no executable code.",
+  "all": true,
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/*.d.ts",
+    "src/**/index.ts",
+    "src/core/types.ts",
+    "src/cli/**",
+    "src/mcp/**",
+    "src/core/weaviate-client.ts",
+    "src/core/git-manager.ts",
+    "src/core/file-reader.ts"
+  ],
+  "exclude-after-remap": true,
+  "reporter": ["text", "text-summary", "html", "lcov", "json-summary"],
+  "reports-dir": "coverage",
+  "lines": 85,
+  "functions": 95,
+  "branches": 78,
+  "statements": 85,
+  "check-coverage": true,
+  "skip-full": false
+}

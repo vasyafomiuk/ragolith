@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-%E2%89%A585%25-brightgreen" alt="Coverage: ≥85%"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js Version"></a>
   <a href="tsconfig.json"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript"></a>
@@ -147,10 +148,23 @@ Example `claude_desktop_config.json` entry:
 
 ```bash
 npm test                 # unit tests via node:test (zero deps, <1s)
+npm run coverage         # same tests + c8 line/branch/function coverage
+npm run coverage:open    # opens coverage/index.html in your browser
 npm run check:layers     # asserts core/ doesn't depend on mcp/ or cli/
 ```
 
 Tests cover the chunkers, search helpers (`classifyAlpha`, `expandQuery`, `autocut`, `diversityFilter`), config loader, file-reader, and chunker dispatch. End-to-end tests that need a running Weaviate are integration-only — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**Coverage gate.** CI fails if any of the following drops below the threshold:
+
+| Metric     | Threshold | Current |
+| ---------- | --------- | ------- |
+| Lines      | 85%       | 88.8%   |
+| Statements | 85%       | 88.8%   |
+| Branches   | 78%       | 81.8%   |
+| Functions  | 95%       | 97.6%   |
+
+Files that need a live Weaviate (`weaviate-client.ts`, `cli/*`, `mcp/server.ts`) or real binaries (`file-reader.ts`, `git-manager.ts`) are excluded from the gate — they'll be covered by integration tests in a follow-up.
 
 ## Contributing
 

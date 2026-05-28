@@ -40,8 +40,16 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
+      - name: Test + coverage
+        run: npm run coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-node${{ matrix.node-version }}
+          path: coverage/
+          retention-days: 7
 
       - name: Build
         run: npm run build

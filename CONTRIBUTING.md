@@ -37,12 +37,18 @@ When in doubt, the contracts between layers are the types in [`src/core/types.ts
 
 ```bash
 npm run check:layers     # must pass — no inter-layer leaks
+npm run lint             # must pass — 0 errors
+npm run format:check     # must pass — Prettier-clean
 npm run typecheck        # must pass
-npm test                 # must pass
+npm run coverage         # tests + strict coverage gate
 npm run build            # must succeed
 ```
 
-CI runs all four on Node 20 and Node 22.
+CI runs all six on Node 20 and Node 22.
+
+**Coverage gate.** The thresholds in [`.c8rc.json`](.c8rc.json) are intentionally tight (lines 85% / statements 85% / branches 78% / functions 95%). New code is expected to come with tests. If you're adding a chunker or a pure helper, write tests for it the same PR.
+
+If you're touching one of the excluded files (`cli/*`, `mcp/server.ts`, `weaviate-client.ts`, `file-reader.ts`, `git-manager.ts`) the gate doesn't apply — those need integration tests which we don't yet run by default. Note in the PR if your change is large enough to merit one.
 
 ## Tests
 
