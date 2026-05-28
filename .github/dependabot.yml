@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # npm dependencies. Weekly cadence keeps PR noise predictable; dev-dep
+  # bumps land in one grouped PR rather than one PR per package.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+
+  # GitHub Actions versions in workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci

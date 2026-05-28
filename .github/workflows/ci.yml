@@ -31,6 +31,12 @@ jobs:
       - name: Check layer boundaries
         run: npm run check:layers
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
       - name: Typecheck
         run: npm run typecheck
 
