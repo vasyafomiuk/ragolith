@@ -59,6 +59,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 | AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges       |
 | Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records |
 | C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | tree-sitter via web-tree-sitter; attributes, file-scoped namespaces, records    |
+| Other Chunkers   | `src/core/chunkers/tree-sitter.ts`    | Python, Go, Rust, Ruby, PHP — all via tree-sitter                               |
 | SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                                    |
 | Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                        |
 | Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                            |
@@ -112,7 +113,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 npm install -g ragolith
 ```
 
-This puts five CLIs on your PATH: `ragolith-init`, `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`. No source clone needed.
+This puts seven CLIs on your PATH: `ragolith-init`, `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`, `ragolith-doctor`, `ragolith-eval`. No source clone needed.
 
 ### From source
 
