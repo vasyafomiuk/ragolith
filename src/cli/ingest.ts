@@ -27,13 +27,10 @@ import { syncRepo, changedFiles, joinRepo } from '../core/git-manager.js';
 import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
 import type {
-  CallEdge,
   ChunkResult,
-  CodeChunk,
   IngestState,
   ProjectConfig,
   FileConfig,
-  SymbolRecord,
 } from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.

@@ -5,11 +5,7 @@
 // to line-based chunking for content outside any class.
 
 import { chunkFallback } from './chunker.js';
-import type {
-  ChunkResult,
-  CodeChunk,
-  SymbolRecord,
-} from '../types.js';
+import type { ChunkResult, CodeChunk, SymbolRecord } from '../types.js';
 
 export interface JavaOptions {
   filePath: string;
@@ -18,7 +14,7 @@ export interface JavaOptions {
 
 const CLASS_RE = /\b(?:public|protected|private|abstract|final|static|\s)*\b(class|interface|enum)\s+([A-Za-z_]\w*)/g;
 const METHOD_RE =
-  /(?:public|protected|private|static|final|synchronized|abstract|native|\s)+[\w<>,\s\[\]?]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:throws[^{;]+)?\s*\{/g;
+  /(?:public|protected|private|static|final|synchronized|abstract|native|\s)+[\w<>,\s[\]?]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:throws[^{;]+)?\s*\{/g;
 
 function findBraceEnd(src: string, openIdx: number): number {
   let depth = 0;

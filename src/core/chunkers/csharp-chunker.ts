@@ -4,11 +4,7 @@
 // Not a full parser; falls back to line-based chunking when nothing matches.
 
 import { chunkFallback } from './chunker.js';
-import type {
-  ChunkResult,
-  CodeChunk,
-  SymbolRecord,
-} from '../types.js';
+import type { ChunkResult } from '../types.js';
 
 export interface CSharpOptions {
   filePath: string;
@@ -18,7 +14,7 @@ export interface CSharpOptions {
 const NS_RE = /\bnamespace\s+([A-Za-z_][\w.]*)/g;
 const TYPE_RE = /\b(?:public|internal|protected|private|abstract|sealed|static|partial|\s)*\b(class|struct|interface|record|enum)\s+([A-Za-z_]\w*)/g;
 const METHOD_RE =
-  /(?:public|internal|protected|private|static|virtual|override|sealed|async|partial|\s)+[\w<>,\s\[\]?.]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/g;
+  /(?:public|internal|protected|private|static|virtual|override|sealed|async|partial|\s)+[\w<>,\s[\]?.]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/g;
 
 function findBraceEnd(src: string, openIdx: number): number {
   let depth = 0;

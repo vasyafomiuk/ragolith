@@ -48,6 +48,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/test.mjs",
     "test:watch": "node scripts/test.mjs --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "check:layers": "node scripts/check-layers.mjs",
     "server": "tsx src/mcp/server.ts",
     "ingest": "tsx src/cli/ingest.ts",
@@ -68,7 +72,12 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "9.32.0",
     "@types/node": "^20.17.10",
-    "tsx": "^4.19.2"
+    "eslint": "9.32.0",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.4.2",
+    "tsx": "^4.19.2",
+    "typescript-eslint": "8.40.0"
   }
 }

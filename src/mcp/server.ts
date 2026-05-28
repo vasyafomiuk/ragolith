@@ -13,7 +13,7 @@ import { Filters, type WeaviateClient } from 'weaviate-client';
 import { loadConfig } from '../core/config.js';
 import { connect, ensureSchema, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from '../core/weaviate-client.js';
 import { search } from '../core/search.js';
-import type { IngestState, Language, SearchHit } from '../core/types.js';
+import type { IngestState, Language } from '../core/types.js';
 
 const cfg = loadConfig();
 
@@ -272,7 +272,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         returnProperties: ['file_path', 'project', 'language'],
       });
       const seen = new Set<string>();
-      const out: Array<{ project: string; file_path: string; language: string }> = [];
+      const out: { project: string; file_path: string; language: string }[] = [];
       for (const o of res.objects) {
         const p = o.properties as Record<string, unknown>;
         const key = `${p['project']}::${p['file_path']}`;
