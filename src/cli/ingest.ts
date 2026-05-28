@@ -166,7 +166,7 @@ async function ingestFiles(
         progress.tick({ detail: storedPath });
         continue;
       }
-      const chunked = pickChunker({
+      const chunked = await pickChunker({
         content: result.content,
         filePath: storedPath,
         project,

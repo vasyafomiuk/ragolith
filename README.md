@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/ragolith"><img src="https://img.shields.io/npm/v/ragolith" alt="npm"></a>
   <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-%E2%89%A586%25-brightgreen" alt="Coverage: ≥86%"></a>
+  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-%E2%89%A588%25-brightgreen" alt="Coverage: ≥88%"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js Version"></a>
   <a href="tsconfig.json"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript"></a>
@@ -50,23 +50,23 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 ## Components
 
-| Component        | File                                  | Role                                                                      |
-| ---------------- | ------------------------------------- | ------------------------------------------------------------------------- |
-| MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                          |
-| Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health       |
-| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                     |
-| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                    |
-| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges |
-| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | Regex-based class/method splitting                                        |
-| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | Regex-based namespace/class/method splitting                              |
-| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                              |
-| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                  |
-| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                      |
-| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                   |
-| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                               |
-| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                       |
-| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                 |
-| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                          |
+| Component        | File                                  | Role                                                                            |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
+| MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                                |
+| Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health             |
+| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                           |
+| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                          |
+| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges       |
+| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records |
+| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | tree-sitter via web-tree-sitter; attributes, file-scoped namespaces, records    |
+| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                                    |
+| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                        |
+| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                            |
+| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                         |
+| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                                     |
+| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                             |
+| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                       |
+| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                                |
 
 ## Data model (Weaviate collections)
 

@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { chunkJava } from '../../src/core/chunkers/java-chunker.js';
 
 describe('chunkJava', () => {
-  it('extracts a class plus its methods', () => {
+  it('extracts a class plus its methods', async () => {
     const src = `
 package demo;
 
@@ -17,7 +17,7 @@ public class Greeter {
     }
 }
 `;
-    const result = chunkJava(src, { filePath: 'Greeter.java', project: 'p' });
+    const result = await chunkJava(src, { filePath: 'Greeter.java', project: 'p' });
 
     const classChunk = result.chunks.find((c) => c.chunk_type === 'class');
     const methodChunks = result.chunks.filter((c) => c.chunk_type === 'method');
@@ -31,9 +31,9 @@ public class Greeter {
     assert.equal(greet.parent, 'Greeter');
   });
 
-  it('falls back to the line-based chunker when no class declaration is found', () => {
+  it('falls back to the line-based chunker when no class declaration is found', async () => {
     const src = '// just a comment file, no class here\nint x;\n';
-    const result = chunkJava(src, { filePath: 'note.java', project: 'p' });
+    const result = await chunkJava(src, { filePath: 'note.java', project: 'p' });
     assert.equal(result.symbols.length, 0);
     assert.ok(result.chunks.length >= 1);
     assert.equal(result.chunks[0]!.chunk_type, 'fallback');

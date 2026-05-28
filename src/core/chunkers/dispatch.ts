@@ -17,7 +17,7 @@ export interface DispatchArgs {
   language: Language;
 }
 
-export function pickChunker(args: DispatchArgs): ChunkResult {
+export async function pickChunker(args: DispatchArgs): Promise<ChunkResult> {
   const { content, filePath, project, language } = args;
   switch (language) {
     case 'typescript':

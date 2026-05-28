@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { chunkCSharp } from '../../src/core/chunkers/csharp-chunker.js';
 
 describe('chunkCSharp', () => {
-  it('handles a block-scoped namespace with a class and method', () => {
+  it('handles a block-scoped namespace with a class and method', async () => {
     const src = `
 namespace Demo
 {
@@ -16,7 +16,7 @@ namespace Demo
     }
 }
 `;
-    const result = chunkCSharp(src, { filePath: 'Greeter.cs', project: 'p' });
+    const result = await chunkCSharp(src, { filePath: 'Greeter.cs', project: 'p' });
 
     const classChunk = result.chunks.find((c) => c.chunk_type === 'class');
     const methodChunk = result.chunks.find((c) => c.chunk_type === 'method');
@@ -28,7 +28,7 @@ namespace Demo
     assert.equal(methodChunk!.symbol, 'Demo.Greeter.Greet');
   });
 
-  it('handles a file-scoped namespace', () => {
+  it('handles a file-scoped namespace', async () => {
     const src = `
 namespace Demo;
 
@@ -37,15 +37,15 @@ public class A
     public void Run() { }
 }
 `;
-    const result = chunkCSharp(src, { filePath: 'A.cs', project: 'p' });
+    const result = await chunkCSharp(src, { filePath: 'A.cs', project: 'p' });
     const classChunk = result.chunks.find((c) => c.chunk_type === 'class');
     assert.ok(classChunk);
     assert.equal(classChunk!.symbol, 'Demo.A');
   });
 
-  it('falls back to the line-based chunker when no type is found', () => {
+  it('falls back to the line-based chunker when no type is found', async () => {
     const src = '// no namespace, no class\nusing System;\n';
-    const result = chunkCSharp(src, { filePath: 'x.cs', project: 'p' });
+    const result = await chunkCSharp(src, { filePath: 'x.cs', project: 'p' });
     assert.equal(result.symbols.length, 0);
     assert.ok(result.chunks.length >= 1);
     assert.equal(result.chunks[0]!.chunk_type, 'fallback');
