@@ -9,16 +9,15 @@
     "src/cli/**",
     "src/mcp/**",
     "src/core/weaviate-client.ts",
-    "src/core/git-manager.ts",
-    "src/core/file-reader.ts"
+    "src/core/git-manager.ts"
   ],
   "exclude-after-remap": true,
   "reporter": ["text", "text-summary", "html", "lcov", "json-summary"],
   "reports-dir": "coverage",
-  "lines": 85,
+  "lines": 86,
   "functions": 95,
-  "branches": 78,
-  "statements": 85,
+  "branches": 79,
+  "statements": 86,
   "check-coverage": true,
   "skip-full": false
 }

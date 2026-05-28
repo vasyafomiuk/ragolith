@@ -1,0 +1,11 @@
+Ragolith Sample Document
+
+This is a tiny fixture used by the file-reader tests. It contains
+several recognizable phrases so the tests can assert on extracted
+content:
+
+  Marker A: authenticate_user_flow
+  Marker B: parsed correctly across page boundaries
+
+The reader should preserve the words above when extracting text from
+both the PDF and the DOCX variants of this document.

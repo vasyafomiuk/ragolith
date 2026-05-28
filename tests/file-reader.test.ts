@@ -2,8 +2,11 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { detectLanguage, readSourceFile } from '../src/core/file-reader.js';
+
+const FIXTURE_PDF = resolve('tests/fixtures/sample.pdf');
+const FIXTURE_DOCX = resolve('tests/fixtures/sample.docx');
 
 describe('detectLanguage', () => {
   it('maps common extensions to their language', () => {
@@ -67,5 +70,23 @@ describe('readSourceFile', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('reads a DOCX file via mammoth and extracts the text', async () => {
+    const result = await readSourceFile(FIXTURE_DOCX, 1_048_576);
+    assert.ok(result, 'expected DOCX read to succeed');
+    assert.equal(result.language, 'docx');
+    // Markers come from tests/fixtures/sample.txt — preserved through the
+    // textutil-generated DOCX and mammoth's text extraction.
+    assert.match(result.content, /authenticate_user_flow/);
+    assert.match(result.content, /parsed correctly/);
+  });
+
+  it('reads a PDF file via pdfjs-dist and extracts the text', async () => {
+    const result = await readSourceFile(FIXTURE_PDF, 1_048_576);
+    assert.ok(result, 'expected PDF read to succeed');
+    assert.equal(result.language, 'pdf');
+    assert.match(result.content, /authenticate_user_flow/);
+    assert.match(result.content, /parsed correctly/);
   });
 });
