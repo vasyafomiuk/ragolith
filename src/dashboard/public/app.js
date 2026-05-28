@@ -67,7 +67,7 @@ function applySetupBanner() {
 
 // ----- routing --------------------------------------------------------------
 
-const VIEWS = ['projects', 'search', 'project', 'ingest', 'config', 'health'];
+const VIEWS = ['projects', 'search', 'project', 'ingest', 'backup', 'config', 'health'];
 
 function showView(view) {
   for (const v of VIEWS) {
@@ -109,6 +109,11 @@ async function route() {
   if (hash === 'ingest') {
     showView('ingest');
     await enterIngestView();
+    return;
+  }
+  if (hash === 'backup') {
+    showView('backup');
+    await enterBackupView();
     return;
   }
   if (hash === 'config') {
@@ -386,46 +391,20 @@ async function loadConfig() {
 
 let configPathCached = '';
 
-// ----- ingest view ---------------------------------------------------------
+// ----- shared jobs stream --------------------------------------------------
+//
+// One EventSource feeds both the Ingest and Backup views. Each view registers
+// a listener that filters by `payload.kind` so logs don't bleed across views.
+// Only one job runs at a time on the backend, so this also keeps the UI
+// honest: if backup is running, the ingest buttons stay disabled too.
 
-let ingestStream = null;
-let ingestProjectsFilled = false;
+let jobsStream = null;
+const jobListeners = new Set();
 
-function setIngestStatus(state) {
-  const badge = $('ingest-status-badge');
-  badge.className = 'badge badge-' + state;
-  badge.textContent = state;
-}
-
-function setIngestRunningUI(running) {
-  for (const id of [
-    'ingest-run-all',
-    'ingest-run-project',
-    'ingest-migrate',
-    'ingest-full',
-    'ingest-project-pick',
-  ]) {
-    const el = $(id);
-    if (el) el.disabled = running;
-  }
-}
-
-function appendIngestLine(line) {
-  const log = $('ingest-log');
-  // Auto-scroll only if the user is at the bottom — preserve manual scroll
-  // position if they're inspecting earlier output.
-  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
-  log.textContent += (log.textContent.length ? '\n' : '') + line;
-  if (atBottom) log.scrollTop = log.scrollHeight;
-}
-
-function attachIngestStream() {
-  if (ingestStream) {
-    ingestStream.close();
-    ingestStream = null;
-  }
-  const es = new EventSource('/api/ingest/stream');
-  ingestStream = es;
+function attachJobsStream() {
+  if (jobsStream) return; // singleton — kept open for the page's lifetime
+  const es = new EventSource('/api/jobs/stream');
+  jobsStream = es;
   es.onmessage = (ev) => {
     let payload;
     try {
@@ -433,6 +412,80 @@ function attachIngestStream() {
     } catch {
       return;
     }
+    for (const fn of jobListeners) {
+      try {
+        fn(payload);
+      } catch {
+        // never let one view break another
+      }
+    }
+  };
+  es.onerror = () => {
+    // EventSource auto-reconnects; the server replays buffered state on the
+    // new connection so no manual recovery needed.
+  };
+}
+
+function listenJobs(fn) {
+  attachJobsStream();
+  jobListeners.add(fn);
+  return () => jobListeners.delete(fn);
+}
+
+function setBadge(id, state) {
+  const badge = $(id);
+  if (!badge) return;
+  badge.className = 'badge badge-' + state;
+  badge.textContent = state;
+}
+
+function setControlsDisabled(ids, disabled) {
+  for (const id of ids) {
+    const el = $(id);
+    if (el) el.disabled = disabled;
+  }
+}
+
+function appendLogLine(logId, line) {
+  const log = $(logId);
+  if (!log) return;
+  // Auto-scroll only if the user is at the bottom — preserve manual scroll
+  // position if they're inspecting earlier output.
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  log.textContent += (log.textContent.length ? '\n' : '') + line;
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+// ----- ingest view ---------------------------------------------------------
+
+let ingestProjectsFilled = false;
+let ingestListenerAttached = false;
+
+const INGEST_CONTROL_IDS = [
+  'ingest-run-all',
+  'ingest-run-project',
+  'ingest-migrate',
+  'ingest-full',
+  'ingest-project-pick',
+];
+
+function setIngestStatus(state) {
+  setBadge('ingest-status-badge', state);
+}
+
+function setIngestRunningUI(running) {
+  setControlsDisabled(INGEST_CONTROL_IDS, running);
+}
+
+function appendIngestLine(line) {
+  appendLogLine('ingest-log', line);
+}
+
+function attachIngestListener() {
+  if (ingestListenerAttached) return;
+  ingestListenerAttached = true;
+  listenJobs((payload) => {
+    if (payload.kind !== 'ingest') return;
     if (payload.type === 'start') {
       $('ingest-log').textContent = '';
       setIngestStatus('running');
@@ -445,11 +498,7 @@ function attachIngestStream() {
       setIngestRunningUI(false);
       appendIngestLine(`\n— exited with code ${code} —`);
     }
-  };
-  es.onerror = () => {
-    // EventSource auto-reconnects; we just surface that the stream wobbled.
-    // No status change — the server will resend the buffered state.
-  };
+  });
 }
 
 async function fillIngestProjects() {
@@ -470,28 +519,31 @@ async function fillIngestProjects() {
   }
 }
 
-async function enterIngestView() {
-  await fillIngestProjects();
-  // Reattach to any in-flight job so refreshing the page doesn't lose it.
+async function reflectActiveJob(kindBadgeSetter, kindRunningSetter, kindWanted) {
   try {
-    const active = await api('/api/ingest/active');
-    if (active && active.id) {
-      setIngestStatus(active.status);
-      setIngestRunningUI(active.status === 'running');
+    const active = await api('/api/jobs/active');
+    if (active && active.id && active.kind === kindWanted) {
+      kindBadgeSetter(active.status);
+      kindRunningSetter(active.status === 'running');
     } else {
-      setIngestStatus('idle');
-      setIngestRunningUI(false);
+      kindBadgeSetter('idle');
+      kindRunningSetter(false);
     }
   } catch {
-    setIngestStatus('idle');
-    setIngestRunningUI(false);
+    kindBadgeSetter('idle');
+    kindRunningSetter(false);
   }
-  attachIngestStream();
+}
+
+async function enterIngestView() {
+  await fillIngestProjects();
+  attachIngestListener();
+  await reflectActiveJob(setIngestStatus, setIngestRunningUI, 'ingest');
 }
 
 async function runIngest(opts) {
   try {
-    // Pre-fetch state — the stream will set it again, but this gives instant
+    // Pre-flip state — the stream will reconfirm it, but this gives instant
     // feedback while the POST is in flight.
     setIngestStatus('running');
     setIngestRunningUI(true);
@@ -523,6 +575,116 @@ $('ingest-run-project').addEventListener('click', () => {
 
 $('ingest-migrate').addEventListener('click', () => {
   runIngest({ migrateOnly: true });
+});
+
+// ----- backup view ---------------------------------------------------------
+
+let backupListenerAttached = false;
+
+const BACKUP_CONTROL_IDS = [
+  'backup-create',
+  'backup-restore',
+  'backup-verify',
+  'backup-push',
+  'backup-pull',
+  'backup-create-id',
+  'backup-create-push',
+  'backup-restore-id',
+  'backup-restore-pull',
+  'backup-verify-keep',
+  'backup-s3-id',
+];
+
+function setBackupStatus(state) {
+  setBadge('backup-status-badge', state);
+}
+
+function setBackupRunningUI(running) {
+  setControlsDisabled(BACKUP_CONTROL_IDS, running);
+}
+
+function appendBackupLine(line) {
+  appendLogLine('backup-log', line);
+}
+
+function attachBackupListener() {
+  if (backupListenerAttached) return;
+  backupListenerAttached = true;
+  listenJobs((payload) => {
+    if (payload.kind !== 'backup') return;
+    if (payload.type === 'start') {
+      $('backup-log').textContent = '';
+      setBackupStatus('running');
+      setBackupRunningUI(true);
+    } else if (payload.type === 'log') {
+      appendBackupLine(payload.line ?? '');
+    } else if (payload.type === 'exit') {
+      const code = payload.code;
+      setBackupStatus(code === 0 ? 'success' : 'failed');
+      setBackupRunningUI(false);
+      appendBackupLine(`\n— exited with code ${code} —`);
+    }
+  });
+}
+
+async function enterBackupView() {
+  attachBackupListener();
+  await reflectActiveJob(setBackupStatus, setBackupRunningUI, 'backup');
+}
+
+async function runBackup(opts) {
+  try {
+    setBackupStatus('running');
+    setBackupRunningUI(true);
+    $('backup-log').textContent = '';
+    await api('/api/backup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(opts),
+    });
+  } catch (err) {
+    appendBackupLine(`Error: ${err.message}`);
+    setBackupStatus('failed');
+    setBackupRunningUI(false);
+  }
+}
+
+function readBackupId(inputId, label) {
+  const el = $(inputId);
+  const id = (el?.value ?? '').trim();
+  if (!id) {
+    appendBackupLine(`Enter a snapshot id for ${label}.`);
+    return null;
+  }
+  return id;
+}
+
+$('backup-create').addEventListener('click', () => {
+  const id = readBackupId('backup-create-id', 'create');
+  if (!id) return;
+  runBackup({ command: 'create', id, pushS3: $('backup-create-push').checked });
+});
+
+$('backup-restore').addEventListener('click', () => {
+  const id = readBackupId('backup-restore-id', 'restore');
+  if (!id) return;
+  runBackup({ command: 'restore', id, pullS3: $('backup-restore-pull').checked });
+});
+
+$('backup-verify').addEventListener('click', () => {
+  runBackup({ command: 'verify', keep: $('backup-verify-keep').checked });
+});
+
+$('backup-push').addEventListener('click', () => {
+  const id = readBackupId('backup-s3-id', 'push');
+  if (!id) return;
+  runBackup({ command: 'push', id });
+});
+
+$('backup-pull').addEventListener('click', () => {
+  const id = readBackupId('backup-s3-id', 'pull');
+  if (!id) return;
+  runBackup({ command: 'pull', id });
 });
 
 function fillForm(cfg) {

@@ -48,6 +48,10 @@
             <span class="navlink-bullet"></span>
             <span>Ingest</span>
           </a>
+          <a href="#backup" class="navlink" data-route="backup">
+            <span class="navlink-bullet"></span>
+            <span>Backup</span>
+          </a>
           <a href="#config" class="navlink" data-route="config">
             <span class="navlink-bullet"></span>
             <span>Config</span>
@@ -190,6 +194,103 @@
               <span id="ingest-status-badge" class="badge badge-idle">idle</span>
             </h2>
             <pre id="ingest-log" class="ingest-log" aria-live="polite"></pre>
+          </div>
+        </section>
+
+        <!-- Backup -->
+        <section id="view-backup" class="view" hidden>
+          <header class="view-head">
+            <h1>Backup</h1>
+            <p class="lead">
+              Snapshot and restore your Weaviate index through
+              <code>ragolith-backup</code>. Output streams below — same job channel as Ingest, so
+              only one runs at a time.
+            </p>
+          </header>
+
+          <div class="card section">
+            <h2 class="section-h">Create snapshot</h2>
+            <p class="muted small">
+              Writes to the backup volume configured in
+              <code>ragc.config.json &rarr; backup</code> (filesystem by default).
+            </p>
+            <div class="run-row">
+              <input
+                type="text"
+                id="backup-create-id"
+                placeholder="snapshot id (e.g. nightly-2025-05-28)"
+                autocomplete="off"
+              />
+              <button type="button" id="backup-create" class="btn btn-primary">
+                Create snapshot
+              </button>
+              <label class="checkbox">
+                <input type="checkbox" id="backup-create-push" />
+                <span>Also push to S3</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">Restore</h2>
+            <p class="muted small">
+              Weaviate refuses to restore on top of existing collections — drop or rename them first
+              if you want a clean replay.
+            </p>
+            <div class="run-row">
+              <input
+                type="text"
+                id="backup-restore-id"
+                placeholder="snapshot id to restore"
+                autocomplete="off"
+              />
+              <button type="button" id="backup-restore" class="btn btn-ghost">Restore</button>
+              <label class="checkbox">
+                <input type="checkbox" id="backup-restore-pull" />
+                <span>Pull from S3 first</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">Verify</h2>
+            <p class="muted small">
+              Round-trips the current index through backup+restore against a throwaway id — a cheap
+              "is the backup volume actually wired up" check.
+            </p>
+            <div class="run-row">
+              <button type="button" id="backup-verify" class="btn btn-ghost">Verify backups</button>
+              <label class="checkbox">
+                <input type="checkbox" id="backup-verify-keep" />
+                <span>Keep verify snapshot on disk</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">S3 transfer</h2>
+            <p class="muted small">
+              Push or pull an existing snapshot to/from S3. Requires the <code>aws</code> CLI on
+              your <code>PATH</code> and <code>backup.s3.bucket</code> set in
+              <code>ragc.config.json</code>.
+            </p>
+            <div class="run-row">
+              <input type="text" id="backup-s3-id" placeholder="snapshot id" autocomplete="off" />
+              <button type="button" id="backup-push" class="btn btn-ghost btn-sm">
+                Push to S3
+              </button>
+              <button type="button" id="backup-pull" class="btn btn-ghost btn-sm">
+                Pull from S3
+              </button>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Activity</span>
+              <span id="backup-status-badge" class="badge badge-idle">idle</span>
+            </h2>
+            <pre id="backup-log" class="ingest-log" aria-live="polite"></pre>
           </div>
         </section>
 

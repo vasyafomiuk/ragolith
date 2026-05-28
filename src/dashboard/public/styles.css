@@ -726,7 +726,7 @@ details.raw summary:hover {
   resize: vertical;
 }
 
-/* ---------- Ingest view ---------- */
+/* ---------- Job views (Ingest, Backup) ---------- */
 
 .run-row {
   display: flex;
@@ -738,8 +738,9 @@ details.raw summary:hover {
 .run-row:last-child {
   margin-bottom: 0;
 }
-.run-row select {
-  flex: 0 0 240px;
+.run-row select,
+.run-row input[type='text'] {
+  flex: 0 0 280px;
   min-width: 0;
 }
 

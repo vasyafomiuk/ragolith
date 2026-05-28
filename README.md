@@ -20,7 +20,7 @@ A RAG pipeline that indexes git repositories and documents into Weaviate, then e
 - **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate.
 - **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter.
 - **Serve** — an MCP server over stdio that exposes ~10 tools (search, find symbol, file structure, callers/callees, etc.) for any MCP-aware LLM client.
-- **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, and check stack health.
+- **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, edit `ragc.config.json`, kick off ingest/backup jobs with live progress, and check stack health.
 - **Backup** — Weaviate filesystem backups with optional S3 push/pull.
 
 All embeddings and reranking run locally in Docker — no external API keys needed.
@@ -268,14 +268,16 @@ ragolith-dashboard --open    # opens http://127.0.0.1:7777 in your browser
 | `-h, --host <host>` | `127.0.0.1` | Bind host. Stays localhost-only by default — pass `0.0.0.0` only if you understand the network exposure. |
 | `-o, --open`        | `false`     | Open the URL in your default browser on start                                                            |
 
-The dashboard has four views:
+The dashboard has six views:
 
 - **Projects** — table of indexed projects with file/chunk counts, language breakdown, last-ingested commit SHA, and update time. Click a row to drill into per-file chunk counts.
 - **Search** — runs the same hybrid pipeline as the MCP server. Optional project filter. Results show file path, line range, chunk type, language, score, and content excerpt. Useful for "why didn't my query return what I expected?"
-- **Project detail** — per-file chunk counts and language tags, sorted by path. Useful for "did the chunker actually process my repo correctly?"
+- **Ingest** — wraps `ragolith-ingest`. "Index everything", re-index a single project, or run `--migrate-only` without leaving the browser. Force-full toggle, live stdout/stderr stream, idle/running/success/failed badge.
+- **Backup** — wraps `ragolith-backup`. Create a snapshot with a chosen id, restore by id, run `verify` to round-trip the index, or push/pull a snapshot to/from S3 (requires `aws` CLI and `backup.s3.bucket`). Same live-streamed log as Ingest.
+- **Config** — load, edit, and save `ragc.config.json` from a form (Weaviate connection, reranker toggle, projects[], standalone files[]) or a raw-JSON pane. Atomic writes (tmp + rename) so an interrupted save can't corrupt the file.
 - **Health** — coloured indicators for Weaviate HTTP / gRPC reachability, embedder + reranker module presence, and ingest-state-file presence. Raw JSON dump expandable.
 
-The dashboard never writes to Weaviate; it's read-only.
+Ingest and Backup share a single Server-Sent Events stream (`/api/jobs/stream`), so only one CLI runs at a time (the second request returns 409) — both touch Weaviate and the dashboard is a single-user tool.
 
 ## Config precedence
 

@@ -250,24 +250,32 @@ export async function writeConfig(next: unknown): Promise<{ path: string }> {
   return { path };
 }
 
-// --- ingest job runner ----------------------------------------------------
+// --- CLI job runner -------------------------------------------------------
 //
-// We run ragolith-ingest as a child process rather than calling its code
-// in-process — that keeps the dashboard layer from importing src/cli/* and
-// preserves the layer-boundary check. The dashboard streams the child's
-// stderr/stdout to subscribers via Server-Sent Events. Late subscribers get
-// the buffered output replayed so refreshing the page mid-run doesn't lose
-// context.
+// Generic runner for spawning ragolith CLIs (ingest, backup, …) as child
+// processes and streaming their output to dashboard subscribers via SSE. We
+// keep these out of the dashboard's import graph to preserve the layer
+// boundary — calling them as subprocesses gives the same UX and keeps the
+// build clean.
+//
+// Only one job runs at a time: ingest and backup both touch Weaviate, and
+// the dashboard is a single-user localhost tool, so serialization is the
+// safe default. The 409 conflict response is the user's signal.
+//
+// Late subscribers (e.g. user refreshes the page mid-run) get the buffered
+// log lines replayed so they don't miss context.
 
-export type IngestStatus = 'running' | 'success' | 'failed';
+export type JobKind = 'ingest' | 'backup';
+export type JobStatus = 'running' | 'success' | 'failed';
 
-export interface IngestJobState {
+export interface JobState {
   id: string;
+  kind: JobKind;
   args: string[];
   startedAt: number;
   endedAt: number | null;
   exitCode: number | null;
-  status: IngestStatus;
+  status: JobStatus;
 }
 
 export interface IngestOptions {
@@ -277,26 +285,41 @@ export interface IngestOptions {
   migrateOnly?: boolean;
 }
 
-interface IngestStreamPayload {
-  type: 'log' | 'exit' | 'start';
+export type BackupCommand = 'create' | 'restore' | 'verify' | 'push' | 'pull';
+
+export interface BackupOptions {
+  command: BackupCommand;
+  /** Required for create/restore/push/pull; not used by verify. */
+  id?: string;
+  /** create only — push the snapshot to S3 after it lands locally. */
+  pushS3?: boolean;
+  /** restore only — pull from S3 into the local volume before restoring. */
+  pullS3?: boolean;
+  /** verify only — leave the verify snapshot on the volume on success. */
+  keep?: boolean;
+}
+
+interface JobStreamPayload {
+  type: 'start' | 'log' | 'exit';
+  kind?: JobKind;
   line?: string;
   code?: number;
-  job?: IngestJobState;
+  job?: JobState;
 }
 
 interface ActiveJob {
-  state: IngestJobState;
+  state: JobState;
   process: ChildProcess;
   buffer: string[];
 }
 
 let activeJob: ActiveJob | null = null;
-const ingestSubscribers = new Set<(p: IngestStreamPayload) => void>();
+const jobSubscribers = new Set<(p: JobStreamPayload) => void>();
 
-function ingestCliPath(): string {
-  // dist/dashboard/api.js → ../cli/ingest.js. Also works under tsx in dev
+function cliPath(name: 'ingest' | 'backup'): string {
+  // dist/dashboard/api.js → ../cli/<name>.js. Also works under tsx in dev
   // because tsx mirrors the same relative layout from src/.
-  return resolve(dirname(fileURLToPath(import.meta.url)), '../cli/ingest.js');
+  return resolve(dirname(fileURLToPath(import.meta.url)), `../cli/${name}.js`);
 }
 
 function makeLineBuffer(onLine: (line: string) => void): {
@@ -323,8 +346,8 @@ function makeLineBuffer(onLine: (line: string) => void): {
   };
 }
 
-function dispatch(payload: IngestStreamPayload): void {
-  for (const sub of ingestSubscribers) {
+function dispatch(payload: JobStreamPayload): void {
+  for (const sub of jobSubscribers) {
     try {
       sub(payload);
     } catch {
@@ -333,24 +356,21 @@ function dispatch(payload: IngestStreamPayload): void {
   }
 }
 
-export function getActiveIngest(): IngestJobState | null {
+export function getActiveJob(): JobState | null {
   return activeJob ? activeJob.state : null;
 }
 
-export function startIngest(opts: IngestOptions = {}): IngestJobState {
+/** Lightweight id validation — keeps shell-flavored characters out. */
+const ID_RE = /^[A-Za-z0-9._-]+$/;
+
+function startJob(kind: JobKind, args: string[]): JobState {
   if (activeJob && activeJob.state.status === 'running') {
-    throw new Error('an ingest is already running');
+    throw new Error(`a ${activeJob.state.kind} job is already running`);
   }
 
-  const cli = ingestCliPath();
-  const args: string[] = [cli];
-  if (opts.full) args.push('--full');
-  if (opts.project) args.push('--project', opts.project);
-  if (opts.file) args.push('--file', opts.file);
-  if (opts.migrateOnly) args.push('--migrate-only');
-
-  const state: IngestJobState = {
-    id: `ingest-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  const state: JobState = {
+    id: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    kind,
     args,
     startedAt: Date.now(),
     endedAt: null,
@@ -368,7 +388,7 @@ export function startIngest(opts: IngestOptions = {}): IngestJobState {
 
   const onLine = (line: string): void => {
     job.buffer.push(line);
-    dispatch({ type: 'log', line });
+    dispatch({ type: 'log', kind, line });
   };
   const lineBuf = makeLineBuffer(onLine);
 
@@ -380,34 +400,63 @@ export function startIngest(opts: IngestOptions = {}): IngestJobState {
     state.endedAt = Date.now();
     state.exitCode = code;
     state.status = code === 0 ? 'success' : 'failed';
-    dispatch({ type: 'exit', code: code ?? 1 });
+    dispatch({ type: 'exit', kind, code: code ?? 1 });
   });
 
   proc.on('error', (err) => {
-    onLine(`[ingest] spawn error: ${err.message}`);
+    onLine(`[${kind}] spawn error: ${err.message}`);
     state.endedAt = Date.now();
     state.exitCode = -1;
     state.status = 'failed';
-    dispatch({ type: 'exit', code: -1 });
+    dispatch({ type: 'exit', kind, code: -1 });
   });
 
-  dispatch({ type: 'start', job: state });
+  dispatch({ type: 'start', kind, job: state });
   return state;
 }
 
+export function startIngest(opts: IngestOptions = {}): JobState {
+  const args: string[] = [cliPath('ingest')];
+  if (opts.full) args.push('--full');
+  if (opts.project) args.push('--project', opts.project);
+  if (opts.file) args.push('--file', opts.file);
+  if (opts.migrateOnly) args.push('--migrate-only');
+  return startJob('ingest', args);
+}
+
+export function startBackup(opts: BackupOptions): JobState {
+  if (!opts.command) throw new Error('backup command is required');
+  const args: string[] = [cliPath('backup'), opts.command];
+  if (opts.command === 'verify') {
+    if (opts.keep) args.push('--keep');
+  } else {
+    // create / restore / push / pull all take an id positional.
+    if (!opts.id || !ID_RE.test(opts.id)) {
+      throw new Error(
+        `backup id must be non-empty and match ${ID_RE.source} (letters, digits, ., _ or -)`,
+      );
+    }
+    args.push(opts.id);
+    if (opts.command === 'create' && opts.pushS3) args.push('--push-s3');
+    if (opts.command === 'restore' && opts.pullS3) args.push('--pull-s3');
+  }
+  return startJob('backup', args);
+}
+
 /**
- * Register a subscriber for ingest events. Buffered lines from the current
+ * Register a subscriber for job events. Buffered lines from the current
  * (or most recent) job are replayed immediately so late subscribers see the
  * full picture. Returns an unsubscribe function.
  */
-export function subscribeIngest(fn: (p: IngestStreamPayload) => void): () => void {
-  ingestSubscribers.add(fn);
+export function subscribeJobs(fn: (p: JobStreamPayload) => void): () => void {
+  jobSubscribers.add(fn);
   if (activeJob) {
-    fn({ type: 'start', job: activeJob.state });
-    for (const line of activeJob.buffer) fn({ type: 'log', line });
+    const kind = activeJob.state.kind;
+    fn({ type: 'start', kind, job: activeJob.state });
+    for (const line of activeJob.buffer) fn({ type: 'log', kind, line });
     if (activeJob.state.status !== 'running') {
-      fn({ type: 'exit', code: activeJob.state.exitCode ?? 1 });
+      fn({ type: 'exit', kind, code: activeJob.state.exitCode ?? 1 });
     }
   }
-  return () => ingestSubscribers.delete(fn);
+  return () => jobSubscribers.delete(fn);
 }

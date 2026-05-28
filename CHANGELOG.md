@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Dashboard CLI parity** — the localhost dashboard now wraps both `ragolith-ingest` and `ragolith-backup`. The Ingest view lets you "Index everything", re-index a single project, or run `--migrate-only`; the new Backup view exposes `create`, `restore`, `verify`, and S3 `push`/`pull` with an id input + checkbox toggles. Both views share a single Server-Sent Events stream (`/api/jobs/stream`) so live stdout/stderr fans out to whoever's watching, and only one job can run at a time across kinds (a 409 surfaces the conflict). Late page loads get the buffered output replayed.
 - **Search-quality eval harness** (`src/core/eval.ts` + `ragolith-eval` CLI). Golden-set JSON of `{id, query, expect, project?}` entries → live search runs → scorecard with recall@K and mean reciprocal rank. `--threshold` makes it CI-gating; `--json` makes it pipe-friendly. Catches regressions when tuning the alpha classifier / synonyms / reranker.
 - **Structured logger** (`src/core/log.ts`). Levels (debug/info/warn/error) + `LOG_FORMAT=json` for log aggregators; default text format preserves the historical `[scope] msg` look. `createLogger('scope').child({ project })` for context-stamped sub-loggers.
 - **Backup verify** subcommand (`ragolith-backup verify`). Snapshots current Weaviate state under a `verify-<ms>` id and waits for `SUCCESS`. Round-trip test for the backup backend.

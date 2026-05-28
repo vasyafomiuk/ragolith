@@ -3,13 +3,19 @@
 //
 // Uses node:http only — no Express, no Fastify, no build step. Routes:
 //
-//   GET  /                       → public/index.html
-//   GET  /app.js                 → public/app.js
-//   GET  /styles.css             → public/styles.css
-//   GET  /api/health             → HealthStatus JSON
-//   GET  /api/projects           → ProjectSummary[]
-//   GET  /api/projects/:name     → file list for one project
-//   POST /api/search             → SearchHit[] for the supplied query
+//   GET  /                          → public/index.html
+//   GET  /app.js                    → public/app.js
+//   GET  /styles.css                → public/styles.css
+//   GET  /api/health                → HealthStatus JSON
+//   GET  /api/projects              → ProjectSummary[]
+//   GET  /api/projects/:name/files  → file list for one project
+//   POST /api/search                → SearchHit[] for the supplied query
+//   GET  /api/config                → current ragc.config.json (+ defaults)
+//   PUT  /api/config                → write a new ragc.config.json (atomic)
+//   POST /api/ingest                → spawn ragolith-ingest as a job
+//   POST /api/backup                → spawn ragolith-backup as a job
+//   GET  /api/jobs/active           → currently-running job or { id: null }
+//   GET  /api/jobs/stream           → SSE feed of job start/log/exit events
 //
 // Binds to 127.0.0.1 by default so the dashboard is not exposed on the
 // network — this is a single-user localhost tool. Override with --host
@@ -25,15 +31,17 @@ import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 
 import {
-  getActiveIngest,
+  getActiveJob,
   health,
   projects,
   projectFiles,
   readConfig,
   runSearch,
+  startBackup,
   startIngest,
-  subscribeIngest,
+  subscribeJobs,
   writeConfig,
+  type BackupOptions,
   type IngestOptions,
   type SearchRequest,
 } from './api.js';
@@ -149,12 +157,39 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         }
         return;
       }
-      if (method === 'GET' && url === '/api/ingest/active') {
-        const job = getActiveIngest();
+      if (method === 'POST' && url === '/api/backup') {
+        const raw = await readBody(req);
+        let body: BackupOptions | undefined;
+        if (raw.trim()) {
+          try {
+            body = JSON.parse(raw) as BackupOptions;
+          } catch (err) {
+            sendJson(res, 400, { error: `body is not valid JSON: ${String(err)}` });
+            return;
+          }
+        }
+        if (!body || !body.command) {
+          sendJson(res, 400, { error: 'missing "command" (create|restore|verify|push|pull)' });
+          return;
+        }
+        try {
+          const job = startBackup(body);
+          sendJson(res, 200, { jobId: job.id, status: job.status, args: job.args });
+        } catch (err) {
+          // 400 for bad args (validation), 409 for "already running" — they
+          // share the same throw site so we discriminate on the message text.
+          const msg = err instanceof Error ? err.message : String(err);
+          const status = msg.startsWith('a ') && msg.includes('already running') ? 409 : 400;
+          sendJson(res, status, { error: msg });
+        }
+        return;
+      }
+      if (method === 'GET' && url === '/api/jobs/active') {
+        const job = getActiveJob();
         sendJson(res, 200, job ?? { id: null });
         return;
       }
-      if (method === 'GET' && url === '/api/ingest/stream') {
+      if (method === 'GET' && url === '/api/jobs/stream') {
         // Server-Sent Events: text/event-stream + `data:` lines + blank-line
         // separators. Browsers' EventSource handles reconnect automatically.
         res.writeHead(200, {
@@ -167,7 +202,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         // Send a comment line as an opening probe; browsers consider the
         // connection healthy as soon as they see any byte.
         res.write(': stream open\n\n');
-        const unsubscribe = subscribeIngest((payload) => {
+        const unsubscribe = subscribeJobs((payload) => {
           // EventSource doesn't tolerate raw newlines in data; JSON encode
           // gives us a single safe line per event.
           res.write(`data: ${JSON.stringify(payload)}\n\n`);
