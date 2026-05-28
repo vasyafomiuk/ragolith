@@ -17,11 +17,13 @@
 //   3. Bump CURRENT_SCHEMA_VERSION so a fresh `ensureSchema` also lands at
 //      the right state for new installs.
 
-import { dataType, type WeaviateClient } from 'weaviate-client';
+import { dataType, generateUuid5, type WeaviateClient } from 'weaviate-client';
 import { CODE_CHUNK } from './weaviate-client.js';
 
 const META_COLLECTION = 'SchemaMeta';
-const META_ID = 'ragolith';
+// Weaviate requires object IDs to be UUIDs. Derive a stable one from a
+// fixed seed so every run of every process targets the same row.
+const META_ID = generateUuid5('ragolith-schema-version');
 
 export interface Migration {
   version: number;
