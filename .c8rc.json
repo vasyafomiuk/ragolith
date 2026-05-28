@@ -12,7 +12,8 @@
     "src/core/weaviate-client.ts",
     "src/core/git-manager.ts",
     "src/core/health.ts",
-    "src/core/migrations.ts"
+    "src/core/migrations.ts",
+    "src/core/eval.ts"
   ],
   "exclude-after-remap": true,
   "reporter": ["text", "text-summary", "html", "lcov", "json-summary"],
