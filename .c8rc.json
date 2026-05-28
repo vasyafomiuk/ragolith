@@ -16,10 +16,10 @@
   "exclude-after-remap": true,
   "reporter": ["text", "text-summary", "html", "lcov", "json-summary"],
   "reports-dir": "coverage",
-  "lines": 88,
+  "lines": 89,
   "functions": 95,
-  "branches": 80,
-  "statements": 88,
+  "branches": 82,
+  "statements": 89,
   "check-coverage": true,
   "skip-full": false
 }
