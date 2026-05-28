@@ -560,8 +560,32 @@ async function runIngest(opts) {
   }
 }
 
+// We gate the genuinely destructive / long-running buttons (full rebuild,
+// per-project re-index, restore) behind window.confirm. The native dialog is
+// universally recognized as "are you sure?", keyboard-friendly out of the box,
+// and doesn't pollute the DOM with custom modal markup. Cheaper-to-undo
+// actions (incremental Index everything, migrate-only, verify, create, push,
+// pull) stay click-and-go to keep daily use frictionless.
+function confirmDestructive(message) {
+  return window.confirm(message);
+}
+
 $('ingest-run-all').addEventListener('click', () => {
-  runIngest({ full: $('ingest-full').checked });
+  const full = $('ingest-full').checked;
+  if (full) {
+    if (
+      !confirmDestructive(
+        'Force full rebuild will DELETE every existing chunk and re-process every ' +
+          'file in every project from scratch.\n\n' +
+          'On large repos this can take many minutes (and your index will be ' +
+          'partially empty while it runs).\n\n' +
+          'Continue with the full rebuild?',
+      )
+    ) {
+      return;
+    }
+  }
+  runIngest({ full });
 });
 
 $('ingest-run-project').addEventListener('click', () => {
@@ -570,9 +594,16 @@ $('ingest-run-project').addEventListener('click', () => {
     appendIngestLine('Pick a project from the dropdown first.');
     return;
   }
-  runIngest({ project: name, full: $('ingest-full').checked });
+  const full = $('ingest-full').checked;
+  const lead = full
+    ? `Re-index "${name}" with FORCE FULL REBUILD?\n\nEvery existing chunk for "${name}" will be deleted and re-processed from scratch.`
+    : `Re-index "${name}"?\n\nChanged files will be re-chunked and re-embedded.`;
+  if (!confirmDestructive(`${lead}\n\nContinue?`)) return;
+  runIngest({ project: name, full });
 });
 
+// Migrate-only just bumps the schema-version row — no chunks touched, no
+// rebuild — so it stays click-and-go.
 $('ingest-migrate').addEventListener('click', () => {
   runIngest({ migrateOnly: true });
 });
@@ -668,7 +699,22 @@ $('backup-create').addEventListener('click', () => {
 $('backup-restore').addEventListener('click', () => {
   const id = readBackupId('backup-restore-id', 'restore');
   if (!id) return;
-  runBackup({ command: 'restore', id, pullS3: $('backup-restore-pull').checked });
+  const pullS3 = $('backup-restore-pull').checked;
+  const lead = pullS3
+    ? `Pull "${id}" from S3 and restore it onto this Weaviate.`
+    : `Restore "${id}" onto this Weaviate.`;
+  if (
+    !confirmDestructive(
+      `${lead}\n\n` +
+        'Weaviate refuses to restore on top of existing collections — so the restore ' +
+        'will fail unless those collections have been dropped first. If it does land, ' +
+        'it REPLACES your current index with the snapshot.\n\n' +
+        'Continue?',
+    )
+  ) {
+    return;
+  }
+  runBackup({ command: 'restore', id, pullS3 });
 });
 
 $('backup-verify').addEventListener('click', () => {
