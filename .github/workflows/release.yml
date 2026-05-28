@@ -1,17 +1,27 @@
 name: Release
 
-# Publishes ragolith to npm whenever a v* tag is pushed.
+# Publishes ragolith to npm. Two ways to fire it:
 #
-# Flow:
-#   1. Tag a release locally:    git tag v0.1.0 && git push --tags
-#   2. This workflow runs:       full local pipeline → npm publish --provenance
+#   A) Push a v* tag (the canonical release flow):
+#        git tag v0.1.0 && git push origin v0.1.0
+#
+#   B) Manual run from the Actions tab (GitHub → Actions → Release →
+#      "Run workflow"). Whatever is in package.json's "version" field at
+#      that moment is what gets published. Use this for re-runs after a
+#      transient failure, or for ad-hoc publishes where you don't want
+#      to deal with tags.
+#
+# Either way the workflow:
+#   1. Runs the full local pipeline (lint + typecheck + coverage + build).
+#   2. npm publish --provenance --access public
 #   3. npm displays the package with a provenance attestation linking the
 #      published tarball back to this exact commit + workflow run.
 #
 # Setup (one-time):
-#   - In the package's npm settings, enable "Publishing access → require 2FA
-#     or automation". Generate an automation token and store it as the
-#     NPM_TOKEN secret in this repo's GitHub Actions settings.
+#   - Create an npm "Granular Access Token" with Read+Write on packages and
+#     "Bypass two-factor authentication" enabled, then store it as the
+#     NPM_TOKEN secret in this repo:
+#       gh secret set NPM_TOKEN --repo vasyafomiuk/ragolith
 #   - For provenance to work, the `id-token: write` permission must be granted
 #     to the workflow (already configured below) and the package must be
 #     published from a public repo (this one is).
@@ -20,6 +30,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run the pipeline + npm pack but skip the actual publish'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -47,7 +63,15 @@ jobs:
       - name: Verify (check:layers, lint, format:check, typecheck, coverage, build)
         run: npm run all
 
+      # Dry-run path: just pack and show what would ship. Useful when fired
+      # via workflow_dispatch with dry_run=true to sanity-check changes
+      # without actually publishing.
+      - name: Dry-run pack
+        if: ${{ inputs.dry_run == true }}
+        run: npm pack --dry-run
+
       - name: Publish to npm
+        if: ${{ inputs.dry_run != true }}
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
