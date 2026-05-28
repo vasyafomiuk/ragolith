@@ -81,7 +81,10 @@ export function autocut(scores: number[]): number {
     const a = scores[i - 1] ?? 0;
     const b = scores[i] ?? 0;
     const d = a - b;
-    if (d > gap) { gap = d; gapIdx = i; }
+    if (d > gap) {
+      gap = d;
+      gapIdx = i;
+    }
   }
   // If the best gap is trivial, keep everything.
   if (gap < 0.05) return scores.length;
@@ -90,10 +93,7 @@ export function autocut(scores: number[]): number {
 
 // --- 6. diversity ---
 
-export function diversityFilter<T extends { file_path: string }>(
-  hits: T[],
-  perFile: number,
-): T[] {
+export function diversityFilter<T extends { file_path: string }>(hits: T[], perFile: number): T[] {
   const counts = new Map<string, number>();
   const out: T[] = [];
   for (const h of hits) {
@@ -107,10 +107,7 @@ export function diversityFilter<T extends { file_path: string }>(
 
 // --- main entry ---
 
-export async function search(
-  client: WeaviateClient,
-  opts: SearchOptions,
-): Promise<SearchHit[]> {
+export async function search(client: WeaviateClient, opts: SearchOptions): Promise<SearchHit[]> {
   const limit = opts.limit ?? 10;
   const alpha = classifyAlpha(opts.query);
   const expanded = expandQuery(opts.query);
@@ -124,9 +121,7 @@ export async function search(
     opts.language ? collection.filter.byProperty('language').equal(opts.language) : undefined,
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
   const filter =
-    clauses.length === 0 ? undefined :
-    clauses.length === 1 ? clauses[0] :
-    Filters.and(...clauses);
+    clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : Filters.and(...clauses);
 
   // Stage 3 — hybrid retrieval with optional reranker.
   let response;
@@ -136,9 +131,7 @@ export async function search(
       limit: overFetchLimit,
       returnMetadata: ['score'],
       ...(filter ? { filters: filter } : {}),
-      ...(opts.rerankerEnabled
-        ? { rerank: { property: 'content', query: opts.query } }
-        : {}),
+      ...(opts.rerankerEnabled ? { rerank: { property: 'content', query: opts.query } } : {}),
     });
   } catch (err) {
     // Stage 4 — graceful fallback if the reranker module is unavailable.
@@ -164,7 +157,7 @@ export async function search(
       project: (p['project'] as string) ?? '',
       start_line: Number(p['start_line'] ?? 0),
       end_line: Number(p['end_line'] ?? 0),
-      language: ((p['language'] as Language) ?? 'unknown'),
+      language: (p['language'] as Language) ?? 'unknown',
       chunk_type: (p['chunk_type'] as SearchHit['chunk_type']) ?? 'fallback',
       score,
     };

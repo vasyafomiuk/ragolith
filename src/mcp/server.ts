@@ -11,7 +11,13 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Filters, type WeaviateClient } from 'weaviate-client';
 import { loadConfig } from '../core/config.js';
-import { connect, ensureSchema, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from '../core/weaviate-client.js';
+import {
+  connect,
+  ensureSchema,
+  CODE_CHUNK,
+  SYMBOL_RECORD,
+  CALL_EDGE,
+} from '../core/weaviate-client.js';
 import { search } from '../core/search.js';
 import type { IngestState, Language } from '../core/types.js';
 
@@ -104,7 +110,9 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
       name: z.string().describe('Symbol name to find (case-sensitive)'),
       prefix: z.boolean().optional().describe('Match by prefix instead of exact (default false)'),
       project: z.string().optional(),
-      kind: z.enum(['function', 'class', 'method', 'interface', 'type', 'enum', 'namespace']).optional(),
+      kind: z
+        .enum(['function', 'class', 'method', 'interface', 'type', 'enum', 'namespace'])
+        .optional(),
       limit: z.number().int().min(1).max(100).optional(),
     },
     async ({ name, prefix, project, kind, limit }) => {
@@ -133,9 +141,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ file_path, project }) => {
       const col = client.collections.get(SYMBOL_RECORD);
       const base = col.filter.byProperty('file_path').equal(file_path);
-      const f = project
-        ? Filters.and(base, col.filter.byProperty('project').equal(project))
-        : base;
+      const f = project ? Filters.and(base, col.filter.byProperty('project').equal(project)) : base;
       const res = await col.query.fetchObjects({ filters: f, limit: 1000 });
       const sorted = [...res.objects].sort((a, b) => {
         const al = Number((a.properties as Record<string, unknown>)['start_line'] ?? 0);
@@ -175,19 +181,21 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         const bl = Number((b.properties as Record<string, unknown>)['start_line'] ?? 0);
         return al - bl;
       });
-      return jsonResult(sorted.map((o) => {
-        const p = o.properties as Record<string, unknown>;
-        return {
-          file_path: p['file_path'],
-          project: p['project'],
-          start_line: p['start_line'],
-          end_line: p['end_line'],
-          language: p['language'],
-          chunk_type: p['chunk_type'],
-          symbol: p['symbol'],
-          content: p['raw_content'] ?? p['content'],
-        };
-      }));
+      return jsonResult(
+        sorted.map((o) => {
+          const p = o.properties as Record<string, unknown>;
+          return {
+            file_path: p['file_path'],
+            project: p['project'],
+            start_line: p['start_line'],
+            end_line: p['end_line'],
+            language: p['language'],
+            chunk_type: p['chunk_type'],
+            symbol: p['symbol'],
+            content: p['raw_content'] ?? p['content'],
+          };
+        }),
+      );
     },
   );
 
@@ -203,9 +211,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ callee, project, limit }) => {
       const col = client.collections.get(CALL_EDGE);
       const base = col.filter.byProperty('callee').equal(callee);
-      const f = project
-        ? Filters.and(base, col.filter.byProperty('project').equal(project))
-        : base;
+      const f = project ? Filters.and(base, col.filter.byProperty('project').equal(project)) : base;
       const res = await col.query.fetchObjects({ filters: f, limit: limit ?? 100 });
       return jsonResult(res.objects.map((o) => o.properties));
     },
@@ -223,9 +229,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ caller, project, limit }) => {
       const col = client.collections.get(CALL_EDGE);
       const base = col.filter.byProperty('caller').equal(caller);
-      const f = project
-        ? Filters.and(base, col.filter.byProperty('project').equal(project))
-        : base;
+      const f = project ? Filters.and(base, col.filter.byProperty('project').equal(project)) : base;
       const res = await col.query.fetchObjects({ filters: f, limit: limit ?? 100 });
       return jsonResult(res.objects.map((o) => o.properties));
     },
@@ -263,9 +267,11 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         language ? col.filter.byProperty('language').equal(language) : undefined,
       ].filter((c): c is NonNullable<typeof c> => c !== undefined);
       const f =
-        clauses.length === 0 ? undefined :
-        clauses.length === 1 ? clauses[0]! :
-        Filters.and(...clauses);
+        clauses.length === 0
+          ? undefined
+          : clauses.length === 1
+            ? clauses[0]!
+            : Filters.and(...clauses);
       const res = await col.query.fetchObjects({
         ...(f ? { filters: f } : {}),
         limit: limit ?? 2000,
@@ -302,6 +308,8 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   // MCP clients read stdout for JSON-RPC; route errors to stderr.
-  process.stderr.write(`[ragolith-server] fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `[ragolith-server] fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+  );
   process.exit(1);
 });

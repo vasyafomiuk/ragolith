@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Format loosely follows [K
 ## [Unreleased]
 
 ### Added
+
 - Initial release scaffolding: MCP server, ingest CLI, backup CLI.
 - Weaviate schema: `CodeChunk`, `SymbolRecord`, `CallEdge`.
 - Chunkers: TS/JS (AST), Java, C#, SQL, plus line-based fallback.

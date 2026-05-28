@@ -12,7 +12,8 @@ export interface JavaOptions {
   project: string;
 }
 
-const CLASS_RE = /\b(?:public|protected|private|abstract|final|static|\s)*\b(class|interface|enum)\s+([A-Za-z_]\w*)/g;
+const CLASS_RE =
+  /\b(?:public|protected|private|abstract|final|static|\s)*\b(class|interface|enum)\s+([A-Za-z_]\w*)/g;
 const METHOD_RE =
   /(?:public|protected|private|static|final|synchronized|abstract|native|\s)+[\w<>,\s[\]?]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:throws[^{;]+)?\s*\{/g;
 
@@ -36,13 +37,27 @@ function findBraceEnd(src: string, openIdx: number): number {
       continue;
     }
     if (inStr) {
-      if (c === '\\') { i++; continue; }
+      if (c === '\\') {
+        i++;
+        continue;
+      }
       if (c === inStr) inStr = null;
       continue;
     }
-    if (c === '/' && next === '/') { inLineComment = true; i++; continue; }
-    if (c === '/' && next === '*') { inBlockComment = true; i++; continue; }
-    if (c === '"' || c === '\'') { inStr = c; continue; }
+    if (c === '/' && next === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      continue;
+    }
     if (c === '{') depth++;
     else if (c === '}') {
       depth--;
@@ -79,7 +94,7 @@ export function chunkJava(content: string, opts: JavaOptions): ChunkResult {
 
     symbols.push({
       name,
-      kind: kindWord === 'interface' ? 'interface' : (kindWord === 'enum' ? 'enum' : 'class'),
+      kind: kindWord === 'interface' ? 'interface' : kindWord === 'enum' ? 'enum' : 'class',
       signature: body.split('{')[0]!.replace(/\s+/g, ' ').trim(),
       exports: true, // top-level Java declarations are visible to the package.
       file_path: opts.filePath,

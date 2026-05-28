@@ -22,16 +22,19 @@ import {
 } from 'weaviate-client';
 
 import { loadConfig } from '../core/config.js';
-import { connect, ensureSchema, deleteFiles, deleteProject, CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE } from '../core/weaviate-client.js';
+import {
+  connect,
+  ensureSchema,
+  deleteFiles,
+  deleteProject,
+  CODE_CHUNK,
+  SYMBOL_RECORD,
+  CALL_EDGE,
+} from '../core/weaviate-client.js';
 import { syncRepo, changedFiles, joinRepo } from '../core/git-manager.js';
 import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
-import type {
-  ChunkResult,
-  IngestState,
-  ProjectConfig,
-  FileConfig,
-} from '../core/types.js';
+import type { ChunkResult, IngestState, ProjectConfig, FileConfig } from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
 // Under module:NodeNext the default-import dance confuses TS into seeing it as
@@ -55,11 +58,7 @@ async function loadGitignore(root: string): Promise<IgnoreInst> {
   return ig;
 }
 
-async function walk(
-  root: string,
-  extensions: Set<string>,
-  ig: IgnoreInst,
-): Promise<string[]> {
+async function walk(root: string, extensions: Set<string>, ig: IgnoreInst): Promise<string[]> {
   const out: string[] = [];
   const stack: string[] = [root];
   while (stack.length > 0) {
@@ -68,7 +67,9 @@ async function walk(
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
-    } catch { continue; }
+    } catch {
+      continue;
+    }
     for (const ent of entries) {
       const full = join(dir, ent.name);
       const rel = relative(root, full);
@@ -97,10 +98,7 @@ interface BatchBuffers {
   edges: ChunkResult['edges'];
 }
 
-async function flushBatches(
-  client: WeaviateClient,
-  buffers: BatchBuffers,
-): Promise<void> {
+async function flushBatches(client: WeaviateClient, buffers: BatchBuffers): Promise<void> {
   // Our domain types are flat primitive maps that the SDK happily accepts at
   // runtime, but its strict NonReferenceInputs<T> mapped type wants an explicit
   // index signature. Cast at the boundary — the shape is correct and stays
@@ -112,7 +110,9 @@ async function flushBatches(
     const col = client.collections.get(CODE_CHUNK);
     const objs: DataObject<undefined>[] = buffers.chunks.map((c) => ({
       properties: asProps(c),
-      id: generateUuid5(`${c.project}::${c.file_path}::${c.start_line}-${c.end_line}::${c.symbol ?? ''}`),
+      id: generateUuid5(
+        `${c.project}::${c.file_path}::${c.start_line}-${c.end_line}::${c.symbol ?? ''}`,
+      ),
     }));
     await col.data.insertMany(objs);
     buffers.chunks.length = 0;
@@ -121,7 +121,9 @@ async function flushBatches(
     const col = client.collections.get(SYMBOL_RECORD);
     const objs: DataObject<undefined>[] = buffers.symbols.map((s) => ({
       properties: asProps(s),
-      id: generateUuid5(`${s.project}::${s.file_path}::${s.kind}::${s.parent ?? ''}::${s.name}::${s.start_line}`),
+      id: generateUuid5(
+        `${s.project}::${s.file_path}::${s.kind}::${s.parent ?? ''}::${s.name}::${s.start_line}`,
+      ),
     }));
     await col.data.insertMany(objs);
     buffers.symbols.length = 0;
@@ -149,24 +151,35 @@ async function ingestFiles(
   let skipped = 0;
   for (const { absPath, storedPath } of fileRoots) {
     const language = detectLanguage(absPath);
-    if (language === 'unknown') { skipped++; continue; }
+    if (language === 'unknown') {
+      skipped++;
+      continue;
+    }
     const result = await readSourceFile(absPath, maxBytes);
-    if (!result) { skipped++; continue; }
+    if (!result) {
+      skipped++;
+      continue;
+    }
     const chunked = pickChunker({
       content: result.content,
       filePath: storedPath,
       project,
       language: result.language,
     });
-    if (commitSha) chunked.chunks.forEach((c) => { c.commit_sha = commitSha; });
+    if (commitSha)
+      chunked.chunks.forEach((c) => {
+        c.commit_sha = commitSha;
+      });
     const prefixed = applyProjectPrefix(chunked, project);
     buffers.chunks.push(...prefixed.chunks);
     buffers.symbols.push(...prefixed.symbols);
     buffers.edges.push(...prefixed.edges);
     processed++;
-    if (buffers.chunks.length >= BATCH_SIZE
-        || buffers.symbols.length >= BATCH_SIZE
-        || buffers.edges.length >= BATCH_SIZE) {
+    if (
+      buffers.chunks.length >= BATCH_SIZE ||
+      buffers.symbols.length >= BATCH_SIZE ||
+      buffers.edges.length >= BATCH_SIZE
+    ) {
       await flushBatches(client, buffers);
     }
   }
@@ -188,16 +201,20 @@ async function ingestProject(
   const incremental = !forceFull && previous?.commit_sha && previous.commit_sha !== handle.head;
 
   const buffers: BatchBuffers = { chunks: [], symbols: [], edges: [] };
-  const subPaths = (project.subPaths && project.subPaths.length > 0) ? project.subPaths : [''];
+  const subPaths = project.subPaths && project.subPaths.length > 0 ? project.subPaths : [''];
 
   if (incremental && previous) {
     const { added, deleted } = await changedFiles(handle.path, previous.commit_sha);
     const inSubpaths = (p: string): boolean =>
       subPaths.some((s) => s === '' || p === s || p.startsWith(s.endsWith('/') ? s : `${s}/`));
-    const addedFiltered = added.filter(inSubpaths).filter((p) => extensions.has(extname(p).toLowerCase()));
+    const addedFiltered = added
+      .filter(inSubpaths)
+      .filter((p) => extensions.has(extname(p).toLowerCase()));
     const deletedFiltered = deleted.filter(inSubpaths);
 
-    process.stderr.write(`[ingest]   incremental: +${addedFiltered.length} ~${deletedFiltered.length}\n`);
+    process.stderr.write(
+      `[ingest]   incremental: +${addedFiltered.length} ~${deletedFiltered.length}\n`,
+    );
     if (deletedFiltered.length + addedFiltered.length > 0) {
       await deleteFiles(client, project.name, [...deletedFiltered, ...addedFiltered]);
     }
@@ -288,9 +305,7 @@ async function main(): Promise<void> {
   const projects = opts.project
     ? cfg.projects.filter((p) => p.name === opts.project)
     : cfg.projects;
-  const files = opts.file
-    ? cfg.files.filter((f) => f.name === opts.file)
-    : cfg.files;
+  const files = opts.file ? cfg.files.filter((f) => f.name === opts.file) : cfg.files;
 
   // Ensure the workDir exists before any clone attempts.
   await mkdir(resolve(cfg.ingest.workDir), { recursive: true });
@@ -308,7 +323,7 @@ async function main(): Promise<void> {
       // Persist after each project so a crash doesn't lose all progress.
       await saveState(stateFile, state);
     } catch (err) {
-      const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       process.stderr.write(`[ingest] project "${project.name}" failed: ${msg}\n`);
     }
   }
@@ -318,7 +333,7 @@ async function main(): Promise<void> {
       await ingestStandalone(client, file, state, cfg.ingest.maxFileBytes);
       await saveState(stateFile, state);
     } catch (err) {
-      const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       process.stderr.write(`[ingest] file "${file.name}" failed: ${msg}\n`);
     }
   }
@@ -330,6 +345,8 @@ async function main(): Promise<void> {
 // Removed import.meta-aware guard: this file is always invoked as the entrypoint
 // (npm run ingest, or via the bin). Run unconditionally.
 main().catch((err) => {
-  process.stderr.write(`[ingest] fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `[ingest] fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+  );
   process.exit(1);
 });

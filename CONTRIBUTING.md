@@ -26,6 +26,7 @@ src/
 ```
 
 **Layering rules**, enforced by `npm run check:layers`:
+
 - `core/` MUST NOT import from `mcp/` or `cli/`.
 - `mcp/` MUST NOT import from `cli/` (and vice versa).
 - `core/` is the only thing exported by the `exports` map in [`package.json`](package.json) — treat reaching into a sub-path as internal.
@@ -89,7 +90,7 @@ Include the Weaviate version (the docker-compose pins 1.28), Node version, the c
 ## Code style
 
 - TypeScript strict mode is on. New code must typecheck without `any` unless you leave a comment explaining why.
-- Comments explain *why*, not *what*. The code already says *what*.
+- Comments explain _why_, not _what_. The code already says _what_.
 - Match the surrounding code's idioms — file headers, error formatting, log prefixes.
 
 ## Releases

@@ -12,7 +12,8 @@ export interface CSharpOptions {
 }
 
 const NS_RE = /\bnamespace\s+([A-Za-z_][\w.]*)/g;
-const TYPE_RE = /\b(?:public|internal|protected|private|abstract|sealed|static|partial|\s)*\b(class|struct|interface|record|enum)\s+([A-Za-z_]\w*)/g;
+const TYPE_RE =
+  /\b(?:public|internal|protected|private|abstract|sealed|static|partial|\s)*\b(class|struct|interface|record|enum)\s+([A-Za-z_]\w*)/g;
 const METHOD_RE =
   /(?:public|internal|protected|private|static|virtual|override|sealed|async|partial|\s)+[\w<>,\s[\]?.]+\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/g;
 
@@ -29,17 +30,34 @@ function findBraceEnd(src: string, openIdx: number): number {
       continue;
     }
     if (inBlockComment) {
-      if (c === '*' && next === '/') { inBlockComment = false; i++; }
+      if (c === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
       continue;
     }
     if (inStr) {
-      if (c === '\\') { i++; continue; }
+      if (c === '\\') {
+        i++;
+        continue;
+      }
       if (c === inStr) inStr = null;
       continue;
     }
-    if (c === '/' && next === '/') { inLineComment = true; i++; continue; }
-    if (c === '/' && next === '*') { inBlockComment = true; i++; continue; }
-    if (c === '"' || c === '\'') { inStr = c; continue; }
+    if (c === '/' && next === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      continue;
+    }
     if (c === '{') depth++;
     else if (c === '}') {
       depth--;
@@ -79,7 +97,7 @@ function extractTypes(
     const fullName = parentNs ? `${parentNs}.${typeName}` : typeName;
     out.symbols.push({
       name: typeName,
-      kind: kindWord === 'interface' ? 'interface' : (kindWord === 'enum' ? 'enum' : 'class'),
+      kind: kindWord === 'interface' ? 'interface' : kindWord === 'enum' ? 'enum' : 'class',
       signature: body.split('{')[0]!.replace(/\s+/g, ' ').trim(),
       ...(parentNs ? { parent: parentNs } : {}),
       exports: true,
@@ -95,7 +113,8 @@ function extractTypes(
       raw_content: body,
       file_path: opts.filePath,
       project: opts.project,
-      start_line: lineAt(source.slice(0, source.length), m.index) + Math.max(0, baseOffset === 0 ? 0 : 0),
+      start_line:
+        lineAt(source.slice(0, source.length), m.index) + Math.max(0, baseOffset === 0 ? 0 : 0),
       end_line: lineAt(source, end),
       language: 'csharp',
       chunk_type: 'class',
@@ -144,7 +163,9 @@ function extractTypes(
     }
 
     // Silence unused-var lints for offsets — they document intent for future extension.
-    void absDecl; void absOpen; void absEnd;
+    void absDecl;
+    void absOpen;
+    void absEnd;
   }
 }
 

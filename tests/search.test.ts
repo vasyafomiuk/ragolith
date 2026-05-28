@@ -3,12 +3,7 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import {
-  classifyAlpha,
-  expandQuery,
-  autocut,
-  diversityFilter,
-} from '../src/core/search.js';
+import { classifyAlpha, expandQuery, autocut, diversityFilter } from '../src/core/search.js';
 
 describe('classifyAlpha', () => {
   it('treats an identifier as keyword-heavy (low alpha)', () => {
@@ -51,7 +46,7 @@ describe('autocut', () => {
 
   it('cuts at the largest score gap', () => {
     // Big drop between idx 1 and idx 2.
-    assert.equal(autocut([0.95, 0.93, 0.42, 0.40]), 2);
+    assert.equal(autocut([0.95, 0.93, 0.42, 0.4]), 2);
   });
 
   it('handles empty input', () => {
@@ -86,6 +81,9 @@ describe('diversityFilter', () => {
       { file_path: 'b.ts', tag: 3 },
     ];
     const out = diversityFilter(hits, 5);
-    assert.deepEqual(out.map((h) => h.tag), [1, 2, 3]);
+    assert.deepEqual(
+      out.map((h) => h.tag),
+      [1, 2, 3],
+    );
   });
 });

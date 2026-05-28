@@ -42,19 +42,41 @@ function splitStatements(src: string): { text: string; startLine: number; endLin
     }
     if (inBlockComment) {
       buf += c;
-      if (c === '*' && next === '/') { buf += next; inBlockComment = false; i++; }
+      if (c === '*' && next === '/') {
+        buf += next;
+        inBlockComment = false;
+        i++;
+      }
       continue;
     }
     if (inStr) {
       buf += c;
-      if (c === '\\') { if (next !== undefined) { buf += next; i++; } continue; }
+      if (c === '\\') {
+        if (next !== undefined) {
+          buf += next;
+          i++;
+        }
+        continue;
+      }
       if (c === inStr) inStr = null;
       continue;
     }
 
-    if (c === '-' && next === '-') { inLineComment = true; buf += c; continue; }
-    if (c === '/' && next === '*') { inBlockComment = true; buf += c; continue; }
-    if (c === '\'' || c === '"' || c === '`') { inStr = c; buf += c; continue; }
+    if (c === '-' && next === '-') {
+      inLineComment = true;
+      buf += c;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      inBlockComment = true;
+      buf += c;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      inStr = c;
+      buf += c;
+      continue;
+    }
 
     if (c === ';') {
       buf += c;

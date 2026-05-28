@@ -14,7 +14,14 @@ beforeEach(async () => {
   process.chdir(tmp);
   resetConfigCache();
   // Strip Weaviate env overrides between cases so we test the merge logic cleanly.
-  for (const k of ['WEAVIATE_HOST', 'WEAVIATE_HTTP_PORT', 'WEAVIATE_GRPC_PORT', 'WEAVIATE_SECURE', 'WEAVIATE_API_KEY', 'RAGOLITH_CONFIG']) {
+  for (const k of [
+    'WEAVIATE_HOST',
+    'WEAVIATE_HTTP_PORT',
+    'WEAVIATE_GRPC_PORT',
+    'WEAVIATE_SECURE',
+    'WEAVIATE_API_KEY',
+    'RAGOLITH_CONFIG',
+  ]) {
     delete process.env[k];
   }
 });

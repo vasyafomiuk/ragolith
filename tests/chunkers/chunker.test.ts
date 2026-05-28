@@ -1,9 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import {
-  chunkFallback,
-  applyProjectPrefix,
-} from '../../src/core/chunkers/chunker.js';
+import { chunkFallback, applyProjectPrefix } from '../../src/core/chunkers/chunker.js';
 
 describe('chunkFallback', () => {
   it('emits no chunks for empty input', () => {
@@ -34,7 +31,10 @@ describe('chunkFallback', () => {
 
   it('splits a long file into multiple chunks with overlap', () => {
     // Build a file ~9000 chars so we cross the 4000-char target twice.
-    const lines = Array.from({ length: 400 }, (_, i) => `line-${i.toString().padStart(3, '0')}-${'x'.repeat(20)}`);
+    const lines = Array.from(
+      { length: 400 },
+      (_, i) => `line-${i.toString().padStart(3, '0')}-${'x'.repeat(20)}`,
+    );
     const content = lines.join('\n');
 
     const result = chunkFallback(content, {
@@ -53,7 +53,10 @@ describe('chunkFallback', () => {
       const prev = result.chunks[i - 1]!;
       const curr = result.chunks[i]!;
       const overlap = prev.end_line - curr.start_line + 1;
-      assert.ok(overlap >= 1 && overlap <= 5, `unexpected overlap ${overlap} between chunk ${i - 1} and ${i}`);
+      assert.ok(
+        overlap >= 1 && overlap <= 5,
+        `unexpected overlap ${overlap} between chunk ${i - 1} and ${i}`,
+      );
     }
   });
 

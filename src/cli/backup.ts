@@ -10,9 +10,7 @@ import { spawn } from 'node:child_process';
 import { loadConfig } from '../core/config.js';
 
 const program = new Command();
-program
-  .name('ragolith-backup')
-  .description('Manage Weaviate backups (filesystem or S3 backend).');
+program.name('ragolith-backup').description('Manage Weaviate backups (filesystem or S3 backend).');
 
 interface BackupStatus {
   id: string;
@@ -27,8 +25,16 @@ function baseUrl(): string {
   return `${proto}://${cfg.weaviate.host}:${cfg.weaviate.httpPort}`;
 }
 
-async function pollStatus(id: string, backend: string, action: 'create' | 'restore'): Promise<void> {
-  const url = `${baseUrl()}/v1/backups/${backend}/${id}/${action === 'restore' ? 'restore' : ''}`.replace(/\/$/, '');
+async function pollStatus(
+  id: string,
+  backend: string,
+  action: 'create' | 'restore',
+): Promise<void> {
+  const url =
+    `${baseUrl()}/v1/backups/${backend}/${id}/${action === 'restore' ? 'restore' : ''}`.replace(
+      /\/$/,
+      '',
+    );
   // Poll up to 30 minutes at 5s intervals.
   for (let i = 0; i < 360; i++) {
     const res = await fetch(url);
@@ -82,7 +88,14 @@ async function s3Push(id: string): Promise<void> {
   // out via `docker cp`, then sync to S3.
   const tmp = `./.ragolith/backup-${id}`;
   await runProcess('docker', ['cp', `ragolith-weaviate:/var/lib/weaviate-backups/${id}`, tmp]);
-  await runProcess('aws', ['s3', 'sync', tmp, `s3://${cfg.backup.s3.bucket}/${prefix}${id}/`, '--region', cfg.backup.s3.region]);
+  await runProcess('aws', [
+    's3',
+    'sync',
+    tmp,
+    `s3://${cfg.backup.s3.bucket}/${prefix}${id}/`,
+    '--region',
+    cfg.backup.s3.region,
+  ]);
 }
 
 async function s3Pull(id: string): Promise<void> {
@@ -90,7 +103,14 @@ async function s3Pull(id: string): Promise<void> {
   if (!cfg.backup.s3?.bucket) throw new Error('backup.s3.bucket not configured');
   const prefix = cfg.backup.s3.prefix ?? '';
   const tmp = `./.ragolith/backup-${id}`;
-  await runProcess('aws', ['s3', 'sync', `s3://${cfg.backup.s3.bucket}/${prefix}${id}/`, tmp, '--region', cfg.backup.s3.region]);
+  await runProcess('aws', [
+    's3',
+    'sync',
+    `s3://${cfg.backup.s3.bucket}/${prefix}${id}/`,
+    tmp,
+    '--region',
+    cfg.backup.s3.region,
+  ]);
   await runProcess('docker', ['cp', tmp, `ragolith-weaviate:/var/lib/weaviate-backups/${id}`]);
 }
 
@@ -131,6 +151,8 @@ program
   });
 
 program.parseAsync(process.argv).catch((err) => {
-  process.stderr.write(`[backup] fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `[backup] fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+  );
   process.exit(1);
 });

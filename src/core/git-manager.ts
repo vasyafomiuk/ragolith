@@ -36,10 +36,7 @@ export function repoDir(workDir: string, project: ProjectConfig): string {
  * - If the directory is missing, clone fresh.
  * - Otherwise, fetch and hard-reset to `origin/<branch>`.
  */
-export async function syncRepo(
-  workDir: string,
-  project: ProjectConfig,
-): Promise<RepoHandle> {
+export async function syncRepo(workDir: string, project: ProjectConfig): Promise<RepoHandle> {
   const path = repoDir(workDir, project);
 
   if (project.localPath) {

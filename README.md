@@ -47,22 +47,22 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 ## Components
 
-| Component        | File                                  | Role                                                                       |
-|------------------|---------------------------------------|----------------------------------------------------------------------------|
-| MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                           |
-| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                      |
-| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                     |
-| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges  |
-| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | Regex-based class/method splitting                                         |
-| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | Regex-based namespace/class/method splitting                               |
-| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                               |
-| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                   |
-| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                       |
-| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                    |
-| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                                |
-| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                        |
-| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                  |
-| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                           |
+| Component        | File                                  | Role                                                                      |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------- |
+| MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                          |
+| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                     |
+| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                    |
+| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges |
+| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | Regex-based class/method splitting                                        |
+| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | Regex-based namespace/class/method splitting                              |
+| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                              |
+| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                  |
+| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                      |
+| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                   |
+| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                               |
+| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                       |
+| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                 |
+| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                          |
 
 ## Data model (Weaviate collections)
 

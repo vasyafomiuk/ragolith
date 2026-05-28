@@ -53,10 +53,12 @@ async function readPdf(path: string): Promise<string> {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const text = await page.getTextContent();
-    const line = text.items.map((it: unknown) => {
-      const item = it as { str?: string };
-      return item.str ?? '';
-    }).join(' ');
+    const line = text.items
+      .map((it: unknown) => {
+        const item = it as { str?: string };
+        return item.str ?? '';
+      })
+      .join(' ');
     pages.push(line);
   }
   await doc.destroy();
@@ -77,10 +79,7 @@ function looksBinary(buf: Buffer): boolean {
   return false;
 }
 
-export async function readSourceFile(
-  path: string,
-  maxBytes: number,
-): Promise<ReadResult | null> {
+export async function readSourceFile(path: string, maxBytes: number): Promise<ReadResult | null> {
   const st = await stat(path);
   if (!st.isFile()) return null;
   if (st.size > maxBytes) return null;

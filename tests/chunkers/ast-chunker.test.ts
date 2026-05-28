@@ -83,7 +83,7 @@ export class A {
   });
 
   it('falls back to the line-based chunker when the file has no top-level structure', () => {
-    const src = "const x = 1; console.log(x);\n";
+    const src = 'const x = 1; console.log(x);\n';
     const result = chunkAst(src, {
       filePath: 'script.ts',
       project: 'p',
