@@ -174,6 +174,8 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
           ? col.filter.byProperty('end_line').greaterOrEqual(start_line)
           : undefined,
       ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+      // clauses.length is checked above; index access is safe.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const f = clauses.length === 1 ? clauses[0]! : Filters.and(...clauses);
       const res = await col.query.fetchObjects({ filters: f, limit: 50 });
       const sorted = [...res.objects].sort((a, b) => {
@@ -270,7 +272,9 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         clauses.length === 0
           ? undefined
           : clauses.length === 1
-            ? clauses[0]!
+            ? // clauses.length is checked above; index access is safe.
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              clauses[0]!
             : Filters.and(...clauses);
       const res = await col.query.fetchObjects({
         ...(f ? { filters: f } : {}),

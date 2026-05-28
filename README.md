@@ -124,14 +124,18 @@ npm run ingest
 
 ## MCP client config
 
-Example `claude_desktop_config.json` entry:
+All MCP-aware clients use roughly the same shape — a `mcpServers` map keyed by name, with `command` + `args` + an optional `env`. The path you want is **`dist/mcp/server.js`** after `npm run build`. If you'd rather skip the build, point the command at `npx tsx /path/to/ragolith/src/mcp/server.ts`.
+
+### Claude Desktop
+
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
     "ragolith": {
       "command": "node",
-      "args": ["/absolute/path/to/ragolith/dist/server.js"],
+      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
       "env": {
         "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
       }
@@ -139,6 +143,66 @@ Example `claude_desktop_config.json` entry:
   }
 }
 ```
+
+### Cursor
+
+`~/.cursor/mcp.json` for the global config, or `.cursor/mcp.json` at the workspace root:
+
+```json
+{
+  "mcpServers": {
+    "ragolith": {
+      "command": "node",
+      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "env": {
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+      }
+    }
+  }
+}
+```
+
+### Cline (VS Code extension)
+
+VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "ragolith": {
+      "command": "node",
+      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "env": {
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+      },
+      "disabled": false
+    }
+  }
+}
+```
+
+### Continue.dev
+
+`~/.continue/config.json` — add ragolith under `mcpServers`:
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "ragolith",
+      "command": "node",
+      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "env": {
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+      }
+    }
+  ]
+}
+```
+
+### Smoke-testing without a client
+
+Once wired, you can call any of the 10 tools (`search`, `find_symbol`, `file_structure`, `read_chunk`, `callers_of`, `callees_of`, `list_projects`, `list_files`, `search_code`, `search_docs`) directly through the client's tool UI. The integration test in [`tests/integration/end-to-end.test.ts`](tests/integration/end-to-end.test.ts) shows the same calls made programmatically with the MCP SDK.
 
 ## Config precedence
 

@@ -95,6 +95,8 @@ export function chunkJava(content: string, opts: JavaOptions): ChunkResult {
     symbols.push({
       name,
       kind: kindWord === 'interface' ? 'interface' : kindWord === 'enum' ? 'enum' : 'class',
+      // The split is guaranteed to yield at least one segment.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       signature: body.split('{')[0]!.replace(/\s+/g, ' ').trim(),
       exports: true, // top-level Java declarations are visible to the package.
       file_path: opts.filePath,

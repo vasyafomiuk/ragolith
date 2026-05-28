@@ -98,6 +98,8 @@ function extractTypes(
     out.symbols.push({
       name: typeName,
       kind: kindWord === 'interface' ? 'interface' : kindWord === 'enum' ? 'enum' : 'class',
+      // The split is guaranteed to yield at least one segment.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       signature: body.split('{')[0]!.replace(/\s+/g, ' ').trim(),
       ...(parentNs ? { parent: parentNs } : {}),
       exports: true,
