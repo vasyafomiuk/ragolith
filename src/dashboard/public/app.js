@@ -78,11 +78,11 @@ async function renderHome() {
     const projects = await api('/api/projects');
     if (projects.length === 0) {
       $('home-empty').hidden = false;
-      $('home-table').hidden = true;
+      $('home-table-wrap').hidden = true;
       return;
     }
     $('home-empty').hidden = true;
-    $('home-table').hidden = false;
+    $('home-table-wrap').hidden = false;
     body.innerHTML = projects
       .map((p) => {
         const langs = Object.entries(p.languages || {})
@@ -229,7 +229,7 @@ async function renderHealth() {
           <span class="dot ${ok ? 'ok' : 'bad'}"></span>
           <span>${escape(value)}</span>
         </div>
-        ${note ? `<div class="muted" style="margin-top:4px;font-size:12px">${escape(note)}</div>` : ''}
+        ${note ? `<div class="note">${escape(note)}</div>` : ''}
       </div>
     `;
     grid.innerHTML = [

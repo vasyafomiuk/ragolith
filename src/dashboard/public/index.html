@@ -3,50 +3,76 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0c" />
     <title>ragolith dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header>
-      <div class="container">
-        <a href="#home" class="brand">
-          <span class="mark"></span>
-          <span class="name">ragolith</span>
+    <div class="stars" aria-hidden="true"></div>
+    <div class="moonglow" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a href="#home" class="brand" aria-label="Ragolith dashboard home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-text">RAGOLITH</span>
+        <span class="brand-suffix">/ DASHBOARD</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#home" data-route="home">Projects</a>
+        <a href="#search" data-route="search">Search</a>
+        <a href="#health" data-route="health">Health</a>
+        <a
+          href="https://github.com/vasyafomiuk/ragolith"
+          class="nav-github"
+          target="_blank"
+          rel="noopener"
+          aria-label="Ragolith on GitHub"
+        >
+          GitHub <span aria-hidden="true">↗</span>
         </a>
-        <nav>
-          <a href="#home" data-route="home">Projects</a>
-          <a href="#search" data-route="search">Search</a>
-          <a href="#health" data-route="health">Health</a>
-        </nav>
-      </div>
+      </nav>
     </header>
 
-    <main class="container">
-      <!-- Each view is hidden until activated by hash routing in app.js. -->
-      <section id="view-home" class="view" hidden>
-        <h1>Indexed projects</h1>
-        <p class="muted" id="home-empty" hidden>
+    <main>
+      <section id="view-home" class="view view-home" hidden>
+        <div class="section-eyebrow">— INDEXED CONTENT</div>
+        <h1 class="section-title">Your knowledge base.</h1>
+        <p class="section-lead muted" id="home-empty" hidden>
           No projects yet. Run <code>ragolith-ingest</code> after editing
           <code>ragc.config.json</code> to populate the index.
         </p>
-        <table id="home-table" hidden>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th class="num">Files</th>
-              <th class="num">Chunks</th>
-              <th>Languages</th>
-              <th>Last commit</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody id="home-body"></tbody>
-        </table>
+        <div class="table-frame" id="home-table-wrap" hidden>
+          <table id="home-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th class="num">Files</th>
+                <th class="num">Chunks</th>
+                <th>Languages</th>
+                <th>Last commit</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="home-body"></tbody>
+          </table>
+        </div>
       </section>
 
-      <section id="view-search" class="view" hidden>
-        <h1>Search</h1>
-        <form id="search-form">
+      <section id="view-search" class="view view-search" hidden>
+        <div class="section-eyebrow">— HYBRID RETRIEVAL</div>
+        <h1 class="section-title">Search the index.</h1>
+        <p class="section-lead">
+          Same pipeline the MCP server uses: BM25 + vector, cross-encoder rerank, autocut, diversity
+          filter.
+        </p>
+        <form id="search-form" class="search-form">
           <input
             id="search-input"
             type="text"
@@ -57,43 +83,65 @@
           <select id="search-project">
             <option value="">all projects</option>
           </select>
-          <button type="submit">Search</button>
+          <button type="submit" class="btn btn-primary">Search</button>
         </form>
-        <p class="muted" id="search-status"></p>
+        <p class="search-status muted" id="search-status"></p>
         <ol id="search-results" class="hits"></ol>
       </section>
 
-      <section id="view-project" class="view" hidden>
-        <a href="#home" class="back">← back to projects</a>
-        <h1 id="project-title">project</h1>
-        <p class="muted" id="project-meta"></p>
-        <table id="project-files">
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Language</th>
-              <th class="num">Chunks</th>
-            </tr>
-          </thead>
-          <tbody id="project-body"></tbody>
-        </table>
+      <section id="view-project" class="view view-project" hidden>
+        <a href="#home" class="back-link">← back to projects</a>
+        <div class="section-eyebrow" id="project-eyebrow">— PROJECT</div>
+        <h1 class="section-title" id="project-title">project</h1>
+        <p class="section-lead muted" id="project-meta"></p>
+        <div class="table-frame">
+          <table id="project-files">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Language</th>
+                <th class="num">Chunks</th>
+              </tr>
+            </thead>
+            <tbody id="project-body"></tbody>
+          </table>
+        </div>
       </section>
 
-      <section id="view-health" class="view" hidden>
-        <h1>Health</h1>
-        <div id="health-grid" class="health-grid"></div>
+      <section id="view-health" class="view view-health" hidden>
+        <div class="section-eyebrow">— STACK STATUS</div>
+        <h1 class="section-title">Health.</h1>
+        <p class="section-lead">
+          Live probe of Weaviate, the embedder, the reranker, and your ingest state file.
+        </p>
+        <div id="health-grid" class="pillars-grid"></div>
         <details class="dump">
           <summary>Raw JSON</summary>
-          <pre id="health-dump"></pre>
+          <div class="code-frame">
+            <div class="code-frame-bar" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <pre id="health-dump" class="code"></pre>
+          </div>
         </details>
       </section>
     </main>
 
-    <footer>
-      <div class="container">
-        <span class="muted">ragolith dashboard · localhost only</span>
-        <a href="https://github.com/vasyafomiuk/ragolith" target="_blank" rel="noopener">github</a>
+    <footer class="site-footer">
+      <div class="footer-row">
+        <a href="#home" class="brand" aria-label="Ragolith home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-text">RAGOLITH</span>
+        </a>
+        <div class="footer-meta">
+          <span>localhost only</span>
+          <span class="dot">·</span>
+          <a href="https://github.com/vasyafomiuk/ragolith" target="_blank" rel="noopener">
+            github.com/vasyafomiuk/ragolith
+          </a>
+        </div>
       </div>
+      <div class="footer-tagline">Solid ground for AI-native software.</div>
     </footer>
 
     <script src="/app.js" type="module"></script>
