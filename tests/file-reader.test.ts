@@ -77,9 +77,11 @@ describe('readSourceFile', () => {
     assert.ok(result, 'expected DOCX read to succeed');
     assert.equal(result.language, 'docx');
     // Markers come from tests/fixtures/sample.txt — preserved through the
-    // textutil-generated DOCX and mammoth's text extraction.
+    // textutil-generated DOCX and mammoth's text extraction. Match with
+    // \s+ between words because PDF and (some) DOCX extractors collapse
+    // multi-space runs differently across platforms.
     assert.match(result.content, /authenticate_user_flow/);
-    assert.match(result.content, /parsed correctly/);
+    assert.match(result.content, /parsed\s+correctly/);
   });
 
   it('reads a PDF file via pdfjs-dist and extracts the text', async () => {
@@ -87,6 +89,8 @@ describe('readSourceFile', () => {
     assert.ok(result, 'expected PDF read to succeed');
     assert.equal(result.language, 'pdf');
     assert.match(result.content, /authenticate_user_flow/);
-    assert.match(result.content, /parsed correctly/);
+    // pdfjs-dist v4 inserts extra whitespace between text runs on some
+    // platforms — `parsed correctly` may come out as `parsed   correctly`.
+    assert.match(result.content, /parsed\s+correctly/);
   });
 });
