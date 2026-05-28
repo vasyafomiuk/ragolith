@@ -144,7 +144,7 @@ async function renderProjects() {
   const body = $('projects-body');
   const card = $('projects-card');
   const empty = $('projects-empty');
-  body.innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
   card.hidden = false;
   empty.hidden = true;
   try {
@@ -162,8 +162,10 @@ async function renderProjects() {
           .map(([k, v]) => `<span class="lang-pill">${escape(k)} ${v}</span>`)
           .join(' ');
         const sha = p.commit_sha ? p.commit_sha.slice(0, 7) : '—';
+        // Stash chunk_count on the row so the delete confirm can surface it
+        // without re-fetching. data-* attributes survive innerHTML rendering.
         return `
-          <tr>
+          <tr data-project-name="${escape(p.name)}" data-chunk-count="${p.chunk_count}">
             <td>
               <a href="#project/${encodeURIComponent(p.name)}">${escape(p.name)}</a>
               <span class="muted small"> · ${escape(p.source)}</span>
@@ -173,12 +175,88 @@ async function renderProjects() {
             <td>${langs || '<span class="muted">—</span>'}</td>
             <td><code>${escape(sha)}</code></td>
             <td class="muted small">${escape(fmtDate(p.updated_at))}</td>
+            <td class="num row-actions">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="reindex">
+                Re-index
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" data-action="delete">
+                Delete
+              </button>
+            </td>
           </tr>
         `;
       })
       .join('');
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="6" class="muted">Error: ${escape(err.message)}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${escape(err.message)}</td></tr>`;
+  }
+}
+
+// Event delegation — one listener on tbody handles every row's buttons. Means
+// we don't need to re-bind after each re-render.
+$('projects-body').addEventListener('click', (ev) => {
+  const btn = ev.target.closest?.('button[data-action]');
+  if (!btn) return;
+  const tr = btn.closest('tr');
+  const name = tr?.dataset.projectName;
+  if (!name) return;
+  if (btn.dataset.action === 'reindex') {
+    void requestRowReindex(name);
+  } else if (btn.dataset.action === 'delete') {
+    const chunkCount = Number(tr.dataset.chunkCount ?? 0);
+    void requestRowDelete(name, chunkCount);
+  }
+});
+
+async function requestRowReindex(name) {
+  if (
+    !confirmDestructive(
+      `Re-index "${name}"?\n\n` +
+        'Changed files will be re-chunked and re-embedded.\n\n' +
+        'Continue?',
+    )
+  ) {
+    return;
+  }
+  try {
+    await api('/api/ingest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ project: name }),
+    });
+    // Drop the user onto the Ingest view so the live log is immediately visible.
+    window.location.hash = '#ingest';
+  } catch (err) {
+    window.alert(`Failed to start ingest for "${name}": ${err.message}`);
+  }
+}
+
+async function requestRowDelete(name, chunkCount) {
+  const chunkPart = chunkCount > 0 ? `${chunkCount} chunk${chunkCount === 1 ? '' : 's'}` : 'chunks';
+  if (
+    !confirmDestructive(
+      `Delete project "${name}"?\n\n` +
+        `This drops ${chunkPart} from Weaviate. ` +
+        `If "${name}" is still listed in ragc.config.json, the next ` +
+        `ragolith-ingest will re-add it from scratch (use the Config view to remove it ` +
+        `permanently). The git checkout on disk is not touched.\n\n` +
+        'Continue?',
+    )
+  ) {
+    return;
+  }
+  try {
+    const result = await api(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    // Refresh the table so the row disappears (or shrinks to empty languages).
+    await renderProjects();
+    if (typeof result?.deletedChunks === 'number') {
+      // Brief affirmation; alert is loud but unambiguous.
+      window.alert(
+        `Deleted ${result.deletedChunks} of ${result.matchedChunks} chunks for "${name}".`,
+      );
+    }
+  } catch (err) {
+    window.alert(`Failed to delete "${name}": ${err.message}`);
   }
 }
 

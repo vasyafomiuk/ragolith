@@ -409,6 +409,14 @@ td a:hover {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* Right-aligned action buttons inside table rows (Projects, Backup). */
+.row-actions {
+  white-space: nowrap;
+}
+.row-actions .btn + .btn {
+  margin-left: 6px;
+}
 .btn-primary {
   background: var(--text);
   color: var(--bg);
@@ -806,7 +814,7 @@ details.raw summary:hover {
   word-break: break-word;
 }
 .ingest-log:empty::before {
-  content: 'No activity yet. Click a button above to start an ingest.';
+  content: 'No activity yet. Click a button above to start.';
   color: #6b6960;
   font-style: italic;
 }

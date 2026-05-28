@@ -165,6 +165,69 @@ export async function runSearch(req: SearchRequest): Promise<SearchHit[]> {
   });
 }
 
+export interface DeleteProjectResult {
+  /** Number of chunks Weaviate confirmed it deleted. */
+  deletedChunks: number;
+  /** Number of chunks the filter matched (>= deletedChunks if some failed). */
+  matchedChunks: number;
+  /** Which entry in the ingest state file we removed, if any. */
+  removedFromState: 'project' | 'file' | 'none';
+}
+
+/**
+ * Drop every chunk for a project from Weaviate's CodeChunk collection, and
+ * remove the project's entry from the ingest state file. We deliberately do
+ * NOT touch ragc.config.json — if the project is still listed there, the next
+ * ragolith-ingest will pick it back up. Repo on disk is untouched too.
+ */
+export async function deleteProject(name: string): Promise<DeleteProjectResult> {
+  const client = await getClient();
+  if (!client) {
+    throw new Error('Weaviate is unreachable; cannot delete chunks');
+  }
+
+  const col = client.collections.get(CODE_CHUNK);
+  // deleteMany takes a filter and returns counts. It batches internally so a
+  // project with tens of thousands of chunks is handled in one call.
+  const result = await col.data.deleteMany(col.filter.byProperty('project').equal(name));
+
+  // State file is small; read, mutate, write atomically.
+  const cfg = loadConfig();
+  const path = resolve(cfg.ingest.stateFile);
+  let state: IngestState = { projects: {}, files: {} };
+  let removed: DeleteProjectResult['removedFromState'] = 'none';
+  if (existsSync(path)) {
+    try {
+      state = JSON.parse(readFileSync(path, 'utf-8')) as IngestState;
+    } catch {
+      // Corrupt state file — fall through with a fresh shape so we don't
+      // overwrite a recoverable file. Actually: we DO want to overwrite,
+      // because reading failed. Restore-from-corrupt isn't our job here.
+      state = { projects: {}, files: {} };
+    }
+    if (state.projects?.[name]) {
+      delete state.projects[name];
+      removed = 'project';
+    } else if (state.files?.[name]) {
+      delete state.files[name];
+      removed = 'file';
+    }
+    if (removed !== 'none') {
+      const dir = dirname(path);
+      if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+      const tmp = `${path}.tmp`;
+      await writeFile(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
+      await rename(tmp, path);
+    }
+  }
+
+  return {
+    deletedChunks: result.successful ?? 0,
+    matchedChunks: result.matches ?? 0,
+    removedFromState: removed,
+  };
+}
+
 /** Per-project file list with chunk counts — used by the project detail view. */
 export async function projectFiles(
   projectName: string,

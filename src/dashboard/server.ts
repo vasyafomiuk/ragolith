@@ -9,6 +9,7 @@
 //   GET  /api/health                → HealthStatus JSON
 //   GET  /api/projects              → ProjectSummary[]
 //   GET  /api/projects/:name/files  → file list for one project
+//   DELETE /api/projects/:name      → drop the project's chunks from Weaviate
 //   POST /api/search                → SearchHit[] for the supplied query
 //   GET  /api/config                → current ragc.config.json (+ defaults)
 //   PUT  /api/config                → write a new ragc.config.json (atomic)
@@ -32,6 +33,7 @@ import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 
 import {
+  deleteProject,
   getActiveJob,
   health,
   listSnapshots,
@@ -58,6 +60,7 @@ const MIME: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
 };
 
 function send(
@@ -124,6 +127,17 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const name = decodeURIComponent(projMatch[1]!);
         sendJson(res, 200, await projectFiles(name));
+        return;
+      }
+      const projDeleteMatch = /^\/api\/projects\/([^/?]+)$/.exec(url);
+      if (method === 'DELETE' && projDeleteMatch) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const name = decodeURIComponent(projDeleteMatch[1]!);
+        try {
+          sendJson(res, 200, await deleteProject(name));
+        } catch (err) {
+          sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+        }
         return;
       }
       if (method === 'POST' && url === '/api/search') {
