@@ -112,7 +112,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 npm install -g ragolith
 ```
 
-This puts four CLIs on your PATH: `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`. No source clone needed.
+This puts five CLIs on your PATH: `ragolith-init`, `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`. No source clone needed.
 
 ### From source
 
@@ -129,22 +129,27 @@ npm run build
 # 1. install
 npm install -g ragolith
 
-# 2. download the example config + docker-compose stack
-curl -O https://raw.githubusercontent.com/vasyafomiuk/ragolith/main/ragc.config.example.json
-curl -O https://raw.githubusercontent.com/vasyafomiuk/ragolith/main/docker-compose.yml
-mv ragc.config.example.json ragc.config.json
-$EDITOR ragc.config.json
+# 2. interactive wizard creates ragc.config.json in $PWD
+ragolith-init
 
-# 3. start the Weaviate + embedder + reranker stack
+# 3. download the docker-compose stack
+curl -O https://raw.githubusercontent.com/vasyafomiuk/ragolith/main/docker-compose.yml
+
+# 4. start the Weaviate + embedder + reranker stack
 docker compose up -d
 
-# 4. ingest your repos and docs
+# 5. ingest your repos and docs
 RAGOLITH_CONFIG=$PWD/ragc.config.json ragolith-ingest
 
-# 5. wire the MCP server into your client
+# 6. browse the result
+RAGOLITH_CONFIG=$PWD/ragc.config.json ragolith-dashboard --open
+
+# 7. wire the MCP server into your client
 #    command: ragolith-server
 #    env:     RAGOLITH_CONFIG=/absolute/path/to/ragc.config.json
 ```
+
+`ragolith-init` accepts `--yes` for scripted/CI use (writes a default config with no projects, you fill in `projects` and `files` later) and `--force` to overwrite an existing config without confirmation.
 
 ## Quick start (from source)
 
