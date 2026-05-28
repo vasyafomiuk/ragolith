@@ -331,6 +331,33 @@ async function renderHealth() {
 
 let configState = null;
 
+/** Render the Config view's heading/lead/button label for the given state.
+ *  Called from loadConfig() and from the save handler so the two stay in
+ *  sync. Crucially, we never put id'd elements inside the rewritten innerHTML
+ *  — earlier versions did and the resulting null `getElementById('config-path')`
+ *  crashed on the next loadConfig. */
+function renderConfigViewState(path, exists) {
+  const title = $('config-title');
+  const lead = $('config-lead');
+  const saveLabel = $('config-save-label');
+  if (exists) {
+    title.textContent = 'Config';
+    lead.innerHTML =
+      'Editing <code>' +
+      escape(path) +
+      '</code>. Saved changes take effect on the next <code>ragolith-ingest</code> / <code>ragolith-server</code> run.';
+    saveLabel.textContent = 'Save';
+  } else {
+    title.textContent = 'Welcome — let’s set up ragolith';
+    lead.innerHTML =
+      'No config file on disk yet. Fill in the form below and click ' +
+      '<strong>Create config</strong> to write <code>' +
+      escape(path) +
+      '</code>. After that you can run <code>ragolith-ingest</code> to populate the index.';
+    saveLabel.textContent = 'Create config';
+  }
+}
+
 async function loadConfig() {
   const status = $('config-status');
   status.textContent = 'Loading…';
@@ -339,36 +366,20 @@ async function loadConfig() {
     const { path, config, exists } = await api('/api/config');
     configState = config;
     configExists = exists;
-    $('config-path').textContent = path;
+    configPathCached = path;
     fillForm(config);
     $('cfg-raw').value = JSON.stringify(config, null, 2);
-    // First-run vs editing-existing tone shift.
-    if (exists) {
-      $('config-title').textContent = 'Config';
-      $('config-lead').innerHTML =
-        'Editing <code id="config-path">' +
-        escape(path) +
-        '</code>. Saved changes take effect on the next <code>ragolith-ingest</code> / <code>ragolith-server</code> run.';
-      $('config-save-label').textContent = 'Save';
-      status.textContent = '';
-      status.className = 'status';
-    } else {
-      $('config-title').textContent = 'Welcome — let’s set up ragolith';
-      $('config-lead').innerHTML =
-        'No config file on disk yet. Fill in the form below and click ' +
-        '<strong>Create config</strong> to write <code>' +
-        escape(path) +
-        '</code>. After that you can run <code>ragolith-ingest</code> to populate the index.';
-      $('config-save-label').textContent = 'Create config';
-      status.textContent = '';
-      status.className = 'status';
-    }
+    renderConfigViewState(path, exists);
+    status.textContent = '';
+    status.className = 'status';
     applySetupBanner();
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
     status.className = 'status err';
   }
 }
+
+let configPathCached = '';
 
 function fillForm(cfg) {
   $('cfg-weaviate-host').value = cfg.weaviate?.host ?? 'localhost';
@@ -569,12 +580,12 @@ $('config-save').addEventListener('click', async () => {
     configState = next;
     const wasNew = configExists === false;
     configExists = true;
+    configPathCached = r.path;
     status.textContent = wasNew ? `Created · ${r.path}` : `Saved · ${r.path}`;
     status.className = 'status ok';
-    // Now that a file exists, switch the Config view's copy back to the
-    // editing tone and dismiss the global banner on other views.
-    $('config-title').textContent = 'Config';
-    $('config-save-label').textContent = 'Save';
+    // File exists now — flip heading/lead/button label to editing tone and
+    // dismiss the global banner on other views.
+    renderConfigViewState(r.path, true);
     applySetupBanner();
   } catch (err) {
     status.textContent = `Save failed: ${err.message}`;
