@@ -1,0 +1,53 @@
+name: Release
+
+# Publishes ragolith to npm whenever a v* tag is pushed.
+#
+# Flow:
+#   1. Tag a release locally:    git tag v0.1.0 && git push --tags
+#   2. This workflow runs:       full local pipeline → npm publish --provenance
+#   3. npm displays the package with a provenance attestation linking the
+#      published tarball back to this exact commit + workflow run.
+#
+# Setup (one-time):
+#   - In the package's npm settings, enable "Publishing access → require 2FA
+#     or automation". Generate an automation token and store it as the
+#     NPM_TOKEN secret in this repo's GitHub Actions settings.
+#   - For provenance to work, the `id-token: write` permission must be granted
+#     to the workflow (already configured below) and the package must be
+#     published from a public repo (this one is).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  # id-token is required for npm provenance (OIDC).
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `prepublishOnly` would re-run this, but failing early on CI surfaces
+      # any breakage in the run page before the publish step starts.
+      - name: Verify (check:layers, lint, format:check, typecheck, coverage, build)
+        run: npm run all
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

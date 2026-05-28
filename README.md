@@ -3,8 +3,9 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/ragolith"><img src="https://img.shields.io/npm/v/ragolith" alt="npm"></a>
   <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-%E2%89%A585%25-brightgreen" alt="Coverage: ≥85%"></a>
+  <a href="https://github.com/vasyafomiuk/ragolith/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-%E2%89%A586%25-brightgreen" alt="Coverage: ≥86%"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js Version"></a>
   <a href="tsconfig.json"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript"></a>
@@ -101,30 +102,75 @@ All embeddings and reranking run locally in Docker — no external API keys need
 - **Stdio transport** — zero network config; MCP client spawns server as child process.
 - **All local** — embeddings + reranking run in Docker, no external API keys needed.
 
-## Quick start
+## Install
+
+### From npm (recommended)
+
+```bash
+npm install -g ragolith
+```
+
+This puts three CLIs on your PATH: `ragolith-server`, `ragolith-ingest`, `ragolith-backup`. No source clone needed.
+
+### From source
+
+```bash
+git clone https://github.com/vasyafomiuk/ragolith.git
+cd ragolith
+npm install
+npm run build
+```
+
+## Quick start (npm install)
 
 ```bash
 # 1. install
-npm install
+npm install -g ragolith
 
-# 2. start Weaviate + embedding + reranker containers
+# 2. download the example config + docker-compose stack
+curl -O https://raw.githubusercontent.com/vasyafomiuk/ragolith/main/ragc.config.example.json
+curl -O https://raw.githubusercontent.com/vasyafomiuk/ragolith/main/docker-compose.yml
+mv ragc.config.example.json ragc.config.json
+$EDITOR ragc.config.json
+
+# 3. start the Weaviate + embedder + reranker stack
+docker compose up -d
+
+# 4. ingest your repos and docs
+RAGOLITH_CONFIG=$PWD/ragc.config.json ragolith-ingest
+
+# 5. wire the MCP server into your client
+#    command: ragolith-server
+#    env:     RAGOLITH_CONFIG=/absolute/path/to/ragc.config.json
+```
+
+## Quick start (from source)
+
+```bash
+# 1. install + build
+npm install
+npm run build
+
+# 2. start Weaviate + embedder + reranker containers
 npm run weaviate:up
 
-# 3. configure (edit ragc.config.json — see ragc.config.example.json)
+# 3. configure
 cp ragc.config.example.json ragc.config.json
 $EDITOR ragc.config.json
 
-# 4. ingest your repos and docs
+# 4. ingest
 npm run ingest
 
-# 5. wire the MCP server into your client (e.g. Claude Desktop)
-#    Point its config at:  npx tsx /path/to/ragolith/src/server.ts
-#    or after `npm run build`:  node /path/to/ragolith/dist/server.js
+# 5. wire the MCP server into your client
+#    command: node /path/to/ragolith/dist/mcp/server.js
+#    or:      npx tsx /path/to/ragolith/src/mcp/server.ts
 ```
 
 ## MCP client config
 
 All MCP-aware clients use roughly the same shape — a `mcpServers` map keyed by name, with `command` + `args` + an optional `env`. The path you want is **`dist/mcp/server.js`** after `npm run build`. If you'd rather skip the build, point the command at `npx tsx /path/to/ragolith/src/mcp/server.ts`.
+
+> All examples below assume you installed via `npm install -g ragolith`. If you cloned the repo instead, swap `"command": "ragolith-server"` for `"command": "node"` and add `"args": ["/absolute/path/to/ragolith/dist/mcp/server.js"]`.
 
 ### Claude Desktop
 
@@ -134,10 +180,9 @@ All MCP-aware clients use roughly the same shape — a `mcpServers` map keyed by
 {
   "mcpServers": {
     "ragolith": {
-      "command": "node",
-      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "command": "ragolith-server",
       "env": {
-        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragc.config.json"
       }
     }
   }
@@ -152,10 +197,9 @@ All MCP-aware clients use roughly the same shape — a `mcpServers` map keyed by
 {
   "mcpServers": {
     "ragolith": {
-      "command": "node",
-      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "command": "ragolith-server",
       "env": {
-        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragc.config.json"
       }
     }
   }
@@ -170,10 +214,9 @@ VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mc
 {
   "mcpServers": {
     "ragolith": {
-      "command": "node",
-      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "command": "ragolith-server",
       "env": {
-        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragc.config.json"
       },
       "disabled": false
     }
@@ -190,10 +233,9 @@ VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mc
   "mcpServers": [
     {
       "name": "ragolith",
-      "command": "node",
-      "args": ["/absolute/path/to/ragolith/dist/mcp/server.js"],
+      "command": "ragolith-server",
       "env": {
-        "RAGOLITH_CONFIG": "/absolute/path/to/ragolith/ragc.config.json"
+        "RAGOLITH_CONFIG": "/absolute/path/to/ragc.config.json"
       }
     }
   ]

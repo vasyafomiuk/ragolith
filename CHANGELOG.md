@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Published to npm as [`ragolith`](https://www.npmjs.com/package/ragolith)**. `npm install -g ragolith` puts `ragolith-server`, `ragolith-ingest`, `ragolith-backup` on your PATH. Source clone no longer required.
+- **Release workflow** (`.github/workflows/release.yml`) that publishes with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) on `v*` tag push, linking each published tarball back to the exact commit + workflow run.
 - **Layered source layout**: `src/core/`, `src/mcp/`, `src/cli/`. The `core` layer is the public surface (re-exported through `src/core/index.ts`); `mcp` and `cli` are sibling adapters. Boundary enforced by `scripts/check-layers.mjs` + a CI step.
 - **Chunker dispatch** moved into `src/core/chunkers/dispatch.ts` so any future transport can reuse it (not just the ingest CLI).
 - **Unit test suite** (`tests/**/*.test.ts`) using `node:test` — zero new runtime deps. 50 tests covering chunkers, search helpers, config, file-reader, and dispatch.
@@ -19,8 +21,13 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Changed
 
+- `weaviate-client` pinned to `~3.12.1` (last version with Node-20 support). 3.13+ requires Node 22; we'll revisit when our engines floor moves.
 - `pickChunker(...)` now takes a single options object (`{ content, filePath, project, language }`) instead of positional args.
 - Java/C# method-detection regex character classes cleaned up — removed unnecessary `\[` escapes inside the classes.
+
+### Known issues
+
+- `npm audit` reports one moderate finding in a transitive `uuid` dep (CVE about `uuid.v3/v5/v6` buffer bounds when a `buf` argument is supplied). Not exploitable in ragolith — weaviate-client never passes that argument. Resolves naturally when we bump engines to Node ≥22 and pull `weaviate-client@3.13+`.
 
 ### Fixed
 

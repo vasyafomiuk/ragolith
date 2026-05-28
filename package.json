@@ -33,6 +33,16 @@
   "engines": {
     "node": ">=20"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "docker-compose.yml",
+    "docker-compose.integration.yml",
+    "ragc.config.example.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "bin": {
     "ragolith-server": "./dist/mcp/server.js",
     "ragolith-ingest": "./dist/cli/ingest.js",
@@ -46,6 +56,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run all",
     "all": "npm run check:layers && npm run lint && npm run format:check && npm run typecheck && npm run coverage && npm run build",
     "test": "node scripts/test.mjs",
     "test:watch": "node scripts/test.mjs --watch",
@@ -73,7 +84,7 @@
     "pdfjs-dist": "^4.10.38",
     "simple-git": "^3.27.0",
     "typescript": "^5.6.3",
-    "weaviate-client": "^3.3.1",
+    "weaviate-client": "~3.12.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
