@@ -1,0 +1,35 @@
+# Slim docker-compose for the integration CI job.
+#
+# Differences from docker-compose.yml:
+#   - No reranker container. The cross-encoder image is ~8GB extracted, which
+#     blows past GitHub-hosted runners' /var/lib/docker disk budget. The
+#     integration test sets `rerankerEnabled: false` in its config, so the
+#     reranker is unused anyway.
+#   - ENABLE_MODULES drops `reranker-transformers` so Weaviate doesn't try to
+#     reach it at startup.
+#   - No volumes — ephemeral storage is fine for a one-shot test.
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.28.0
+    container_name: ragolith-weaviate
+    restart: 'no'
+    ports:
+      - '8080:8080'
+      - '50051:50051'
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: text2vec-transformers
+      ENABLE_MODULES: text2vec-transformers
+      TRANSFORMERS_INFERENCE_API: http://t2v-transformers:8080
+      CLUSTER_HOSTNAME: 'node1'
+    depends_on:
+      - t2v-transformers
+
+  t2v-transformers:
+    image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    container_name: ragolith-t2v
+    restart: 'no'
+    environment:
+      ENABLE_CUDA: '0'

@@ -75,8 +75,19 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Start Weaviate stack
-        run: docker compose up -d
+      - name: Free runner disk
+        # GitHub-hosted runners have ~14GB free on /. The t2v image is ~6GB
+        # extracted; deleting the preinstalled Android SDK + .NET + GHC etc.
+        # buys us 30+ GB of headroom and takes ~30s.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Start Weaviate (slim integration stack)
+        # docker-compose.integration.yml drops the reranker container — the
+        # integration tests set rerankerEnabled:false so it's unused, and the
+        # image is too large for the runner's disk.
+        run: docker compose -f docker-compose.integration.yml up -d
 
       - name: Run integration tests
         # The test itself polls /v1/.well-known/ready up to 3 min, so no
@@ -85,8 +96,8 @@ jobs:
 
       - name: Show stack logs on failure
         if: failure()
-        run: docker compose logs
+        run: docker compose -f docker-compose.integration.yml logs
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.integration.yml down -v
