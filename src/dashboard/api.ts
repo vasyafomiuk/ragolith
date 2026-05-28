@@ -11,6 +11,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { rename, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn, type ChildProcess } from 'node:child_process';
 import type { WeaviateClient } from 'weaviate-client';
 import { loadConfig, resetConfigCache } from '../core/config.js';
 import { connect, CODE_CHUNK } from '../core/weaviate-client.js';
@@ -246,4 +248,166 @@ export async function writeConfig(next: unknown): Promise<{ path: string }> {
   // Invalidate the cache so subsequent loadConfig() picks up the new file.
   resetConfigCache();
   return { path };
+}
+
+// --- ingest job runner ----------------------------------------------------
+//
+// We run ragolith-ingest as a child process rather than calling its code
+// in-process — that keeps the dashboard layer from importing src/cli/* and
+// preserves the layer-boundary check. The dashboard streams the child's
+// stderr/stdout to subscribers via Server-Sent Events. Late subscribers get
+// the buffered output replayed so refreshing the page mid-run doesn't lose
+// context.
+
+export type IngestStatus = 'running' | 'success' | 'failed';
+
+export interface IngestJobState {
+  id: string;
+  args: string[];
+  startedAt: number;
+  endedAt: number | null;
+  exitCode: number | null;
+  status: IngestStatus;
+}
+
+export interface IngestOptions {
+  full?: boolean;
+  project?: string;
+  file?: string;
+  migrateOnly?: boolean;
+}
+
+interface IngestStreamPayload {
+  type: 'log' | 'exit' | 'start';
+  line?: string;
+  code?: number;
+  job?: IngestJobState;
+}
+
+interface ActiveJob {
+  state: IngestJobState;
+  process: ChildProcess;
+  buffer: string[];
+}
+
+let activeJob: ActiveJob | null = null;
+const ingestSubscribers = new Set<(p: IngestStreamPayload) => void>();
+
+function ingestCliPath(): string {
+  // dist/dashboard/api.js → ../cli/ingest.js. Also works under tsx in dev
+  // because tsx mirrors the same relative layout from src/.
+  return resolve(dirname(fileURLToPath(import.meta.url)), '../cli/ingest.js');
+}
+
+function makeLineBuffer(onLine: (line: string) => void): {
+  push: (chunk: string) => void;
+  flush: () => void;
+} {
+  let buf = '';
+  return {
+    push(chunk: string) {
+      buf += chunk;
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        onLine(line);
+      }
+    },
+    flush() {
+      if (buf.length > 0) {
+        onLine(buf);
+        buf = '';
+      }
+    },
+  };
+}
+
+function dispatch(payload: IngestStreamPayload): void {
+  for (const sub of ingestSubscribers) {
+    try {
+      sub(payload);
+    } catch {
+      // a misbehaving subscriber must not stop the others
+    }
+  }
+}
+
+export function getActiveIngest(): IngestJobState | null {
+  return activeJob ? activeJob.state : null;
+}
+
+export function startIngest(opts: IngestOptions = {}): IngestJobState {
+  if (activeJob && activeJob.state.status === 'running') {
+    throw new Error('an ingest is already running');
+  }
+
+  const cli = ingestCliPath();
+  const args: string[] = [cli];
+  if (opts.full) args.push('--full');
+  if (opts.project) args.push('--project', opts.project);
+  if (opts.file) args.push('--file', opts.file);
+  if (opts.migrateOnly) args.push('--migrate-only');
+
+  const state: IngestJobState = {
+    id: `ingest-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    args,
+    startedAt: Date.now(),
+    endedAt: null,
+    exitCode: null,
+    status: 'running',
+  };
+
+  const proc = spawn('node', args, {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const job: ActiveJob = { state, process: proc, buffer: [] };
+  activeJob = job;
+
+  const onLine = (line: string): void => {
+    job.buffer.push(line);
+    dispatch({ type: 'log', line });
+  };
+  const lineBuf = makeLineBuffer(onLine);
+
+  proc.stdout?.on('data', (chunk: Buffer) => lineBuf.push(chunk.toString('utf-8')));
+  proc.stderr?.on('data', (chunk: Buffer) => lineBuf.push(chunk.toString('utf-8')));
+
+  proc.on('exit', (code) => {
+    lineBuf.flush();
+    state.endedAt = Date.now();
+    state.exitCode = code;
+    state.status = code === 0 ? 'success' : 'failed';
+    dispatch({ type: 'exit', code: code ?? 1 });
+  });
+
+  proc.on('error', (err) => {
+    onLine(`[ingest] spawn error: ${err.message}`);
+    state.endedAt = Date.now();
+    state.exitCode = -1;
+    state.status = 'failed';
+    dispatch({ type: 'exit', code: -1 });
+  });
+
+  dispatch({ type: 'start', job: state });
+  return state;
+}
+
+/**
+ * Register a subscriber for ingest events. Buffered lines from the current
+ * (or most recent) job are replayed immediately so late subscribers see the
+ * full picture. Returns an unsubscribe function.
+ */
+export function subscribeIngest(fn: (p: IngestStreamPayload) => void): () => void {
+  ingestSubscribers.add(fn);
+  if (activeJob) {
+    fn({ type: 'start', job: activeJob.state });
+    for (const line of activeJob.buffer) fn({ type: 'log', line });
+    if (activeJob.state.status !== 'running') {
+      fn({ type: 'exit', code: activeJob.state.exitCode ?? 1 });
+    }
+  }
+  return () => ingestSubscribers.delete(fn);
 }

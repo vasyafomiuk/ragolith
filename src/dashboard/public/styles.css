@@ -726,6 +726,90 @@ details.raw summary:hover {
   resize: vertical;
 }
 
+/* ---------- Ingest view ---------- */
+
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.run-row:last-child {
+  margin-bottom: 0;
+}
+.run-row select {
+  flex: 0 0 240px;
+  min-width: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge-idle {
+  background: var(--bg-3);
+  color: var(--text-dim);
+}
+.badge-running {
+  background: rgba(184, 146, 79, 0.12);
+  color: var(--accent-strong);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.badge-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--ok);
+}
+.badge-failed {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--bad);
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.ingest-log {
+  background: #0f0f10;
+  color: #d8d4c8;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ingest-log:empty::before {
+  content: 'No activity yet. Click a button above to start an ingest.';
+  color: #6b6960;
+  font-style: italic;
+}
+
 #config-status.ok {
   color: var(--ok);
 }

@@ -67,7 +67,7 @@ function applySetupBanner() {
 
 // ----- routing --------------------------------------------------------------
 
-const VIEWS = ['projects', 'search', 'project', 'config', 'health'];
+const VIEWS = ['projects', 'search', 'project', 'ingest', 'config', 'health'];
 
 function showView(view) {
   for (const v of VIEWS) {
@@ -104,6 +104,11 @@ async function route() {
   if (hash === 'search') {
     showView('search');
     await ensureProjectFilter();
+    return;
+  }
+  if (hash === 'ingest') {
+    showView('ingest');
+    await enterIngestView();
     return;
   }
   if (hash === 'config') {
@@ -380,6 +385,145 @@ async function loadConfig() {
 }
 
 let configPathCached = '';
+
+// ----- ingest view ---------------------------------------------------------
+
+let ingestStream = null;
+let ingestProjectsFilled = false;
+
+function setIngestStatus(state) {
+  const badge = $('ingest-status-badge');
+  badge.className = 'badge badge-' + state;
+  badge.textContent = state;
+}
+
+function setIngestRunningUI(running) {
+  for (const id of [
+    'ingest-run-all',
+    'ingest-run-project',
+    'ingest-migrate',
+    'ingest-full',
+    'ingest-project-pick',
+  ]) {
+    const el = $(id);
+    if (el) el.disabled = running;
+  }
+}
+
+function appendIngestLine(line) {
+  const log = $('ingest-log');
+  // Auto-scroll only if the user is at the bottom — preserve manual scroll
+  // position if they're inspecting earlier output.
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  log.textContent += (log.textContent.length ? '\n' : '') + line;
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function attachIngestStream() {
+  if (ingestStream) {
+    ingestStream.close();
+    ingestStream = null;
+  }
+  const es = new EventSource('/api/ingest/stream');
+  ingestStream = es;
+  es.onmessage = (ev) => {
+    let payload;
+    try {
+      payload = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (payload.type === 'start') {
+      $('ingest-log').textContent = '';
+      setIngestStatus('running');
+      setIngestRunningUI(true);
+    } else if (payload.type === 'log') {
+      appendIngestLine(payload.line ?? '');
+    } else if (payload.type === 'exit') {
+      const code = payload.code;
+      setIngestStatus(code === 0 ? 'success' : 'failed');
+      setIngestRunningUI(false);
+      appendIngestLine(`\n— exited with code ${code} —`);
+    }
+  };
+  es.onerror = () => {
+    // EventSource auto-reconnects; we just surface that the stream wobbled.
+    // No status change — the server will resend the buffered state.
+  };
+}
+
+async function fillIngestProjects() {
+  if (ingestProjectsFilled) return;
+  try {
+    const projects = await api('/api/projects');
+    const sel = $('ingest-project-pick');
+    for (const p of projects) {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+    ingestProjectsFilled = true;
+  } catch {
+    // If projects fail to load (Weaviate down) the dropdown stays empty —
+    // the user can still click 'Index everything' which goes via config.
+  }
+}
+
+async function enterIngestView() {
+  await fillIngestProjects();
+  // Reattach to any in-flight job so refreshing the page doesn't lose it.
+  try {
+    const active = await api('/api/ingest/active');
+    if (active && active.id) {
+      setIngestStatus(active.status);
+      setIngestRunningUI(active.status === 'running');
+    } else {
+      setIngestStatus('idle');
+      setIngestRunningUI(false);
+    }
+  } catch {
+    setIngestStatus('idle');
+    setIngestRunningUI(false);
+  }
+  attachIngestStream();
+}
+
+async function runIngest(opts) {
+  try {
+    // Pre-fetch state — the stream will set it again, but this gives instant
+    // feedback while the POST is in flight.
+    setIngestStatus('running');
+    setIngestRunningUI(true);
+    $('ingest-log').textContent = '';
+    await api('/api/ingest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(opts),
+    });
+  } catch (err) {
+    appendIngestLine(`Error: ${err.message}`);
+    setIngestStatus('failed');
+    setIngestRunningUI(false);
+  }
+}
+
+$('ingest-run-all').addEventListener('click', () => {
+  runIngest({ full: $('ingest-full').checked });
+});
+
+$('ingest-run-project').addEventListener('click', () => {
+  const name = $('ingest-project-pick').value;
+  if (!name) {
+    appendIngestLine('Pick a project from the dropdown first.');
+    return;
+  }
+  runIngest({ project: name, full: $('ingest-full').checked });
+});
+
+$('ingest-migrate').addEventListener('click', () => {
+  runIngest({ migrateOnly: true });
+});
 
 function fillForm(cfg) {
   $('cfg-weaviate-host').value = cfg.weaviate?.host ?? 'localhost';

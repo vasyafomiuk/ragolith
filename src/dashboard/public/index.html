@@ -44,6 +44,10 @@
             <span class="navlink-bullet"></span>
             <span>Search</span>
           </a>
+          <a href="#ingest" class="navlink" data-route="ingest">
+            <span class="navlink-bullet"></span>
+            <span>Ingest</span>
+          </a>
           <a href="#config" class="navlink" data-route="config">
             <span class="navlink-bullet"></span>
             <span>Config</span>
@@ -138,6 +142,54 @@
               </thead>
               <tbody id="project-body"></tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- Ingest -->
+        <section id="view-ingest" class="view" hidden>
+          <header class="view-head">
+            <h1>Ingest</h1>
+            <p class="lead">
+              Run <code>ragolith-ingest</code> from here. Live progress streams below — chunk and
+              symbol counters tick up the same way they would in a terminal.
+            </p>
+          </header>
+
+          <div class="card section">
+            <h2 class="section-h">Run</h2>
+            <div class="run-row">
+              <button type="button" id="ingest-run-all" class="btn btn-primary">
+                Index everything
+              </button>
+              <label class="checkbox">
+                <input type="checkbox" id="ingest-full" />
+                <span>Force full rebuild</span>
+              </label>
+            </div>
+            <div class="run-row">
+              <select id="ingest-project-pick" aria-label="Project to re-index">
+                <option value="">— pick a project —</option>
+              </select>
+              <button type="button" id="ingest-run-project" class="btn btn-ghost">
+                Re-index project
+              </button>
+            </div>
+            <div class="run-row">
+              <button type="button" id="ingest-migrate" class="btn btn-ghost btn-sm">
+                Run schema migrations only
+              </button>
+              <span class="muted small">
+                Useful after pulling a ragolith update that bumps the schema version.
+              </span>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Activity</span>
+              <span id="ingest-status-badge" class="badge badge-idle">idle</span>
+            </h2>
+            <pre id="ingest-log" class="ingest-log" aria-live="polite"></pre>
           </div>
         </section>
 

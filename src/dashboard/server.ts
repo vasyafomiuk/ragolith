@@ -25,12 +25,16 @@ import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 
 import {
+  getActiveIngest,
   health,
   projects,
   projectFiles,
   readConfig,
   runSearch,
+  startIngest,
+  subscribeIngest,
   writeConfig,
+  type IngestOptions,
   type SearchRequest,
 } from './api.js';
 
@@ -124,6 +128,57 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }
       if (method === 'GET' && url === '/api/config') {
         sendJson(res, 200, readConfig());
+        return;
+      }
+      if (method === 'POST' && url === '/api/ingest') {
+        const raw = await readBody(req);
+        let body: IngestOptions = {};
+        if (raw.trim()) {
+          try {
+            body = JSON.parse(raw) as IngestOptions;
+          } catch (err) {
+            sendJson(res, 400, { error: `body is not valid JSON: ${String(err)}` });
+            return;
+          }
+        }
+        try {
+          const job = startIngest(body);
+          sendJson(res, 200, { jobId: job.id, status: job.status, args: job.args });
+        } catch (err) {
+          sendJson(res, 409, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+      if (method === 'GET' && url === '/api/ingest/active') {
+        const job = getActiveIngest();
+        sendJson(res, 200, job ?? { id: null });
+        return;
+      }
+      if (method === 'GET' && url === '/api/ingest/stream') {
+        // Server-Sent Events: text/event-stream + `data:` lines + blank-line
+        // separators. Browsers' EventSource handles reconnect automatically.
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+          // Tell intermediate proxies (none locally, but harmless) not to buffer.
+          'x-accel-buffering': 'no',
+        });
+        // Send a comment line as an opening probe; browsers consider the
+        // connection healthy as soon as they see any byte.
+        res.write(': stream open\n\n');
+        const unsubscribe = subscribeIngest((payload) => {
+          // EventSource doesn't tolerate raw newlines in data; JSON encode
+          // gives us a single safe line per event.
+          res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        });
+        const cleanup = (): void => {
+          unsubscribe();
+          // Don't close the response twice — Node will throw.
+          if (!res.writableEnded) res.end();
+        };
+        req.on('close', cleanup);
+        req.on('aborted', cleanup);
         return;
       }
       if (method === 'PUT' && url === '/api/config') {
