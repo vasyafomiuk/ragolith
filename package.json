@@ -48,6 +48,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/test.mjs",
     "test:watch": "node scripts/test.mjs --watch",
+    "test:integration": "node scripts/test.mjs --integration",
+    "test:all": "node scripts/test.mjs --all",
     "coverage": "c8 node scripts/test.mjs",
     "coverage:open": "c8 node scripts/test.mjs && open coverage/index.html",
     "lint": "eslint .",

@@ -151,9 +151,14 @@ npm test                 # unit tests via node:test (zero deps, <1s)
 npm run coverage         # same tests + c8 line/branch/function coverage
 npm run coverage:open    # opens coverage/index.html in your browser
 npm run check:layers     # asserts core/ doesn't depend on mcp/ or cli/
+
+# Integration (requires Docker + a built dist/):
+npm run weaviate:up      # start Weaviate + embedder + reranker
+npm run build            # compile dist/
+npm run test:integration # end-to-end via real MCP server + real Weaviate
 ```
 
-Tests cover the chunkers, search helpers (`classifyAlpha`, `expandQuery`, `autocut`, `diversityFilter`), config loader, file-reader, and chunker dispatch. End-to-end tests that need a running Weaviate are integration-only — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Unit tests cover the chunkers, search helpers (`classifyAlpha`, `expandQuery`, `autocut`, `diversityFilter`), config loader, file-reader, and chunker dispatch. The integration test spins up a tiny git-repo fixture, runs the real ingest CLI, then drives the real MCP server over stdio with the official MCP client — covering the parts that have no unit tests (CLI, MCP server, Weaviate schema).
 
 **Coverage gate.** CI fails if any of the following drops below the threshold:
 

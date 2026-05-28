@@ -44,7 +44,20 @@ npm run coverage         # tests + strict coverage gate
 npm run build            # must succeed
 ```
 
-CI runs all six on Node 20 and Node 22.
+CI runs all six on Node 20 and Node 22, then runs the integration suite once on Node 22 against a real Weaviate stack.
+
+### Integration tests (optional locally, gating in CI)
+
+```bash
+npm run weaviate:up         # Docker stack: Weaviate + embedder + reranker
+npm run build               # we spawn dist/cli/ingest.js and dist/mcp/server.js
+npm run test:integration    # end-to-end via the real MCP client
+npm run weaviate:down       # tear down when you're done
+```
+
+Run them when you touch anything in `src/mcp/`, `src/cli/`, or `src/core/weaviate-client.ts` — those files are excluded from the unit coverage gate because they need a live Weaviate, so the integration suite is the only thing that exercises them.
+
+First-time `weaviate:up` pulls ~1GB of images (Weaviate 1.28 + MiniLM-L6 embedder + cross-encoder reranker) and the embedder takes ~30s to warm up. After that, runs are fast.
 
 **Coverage gate.** The thresholds in [`.c8rc.json`](.c8rc.json) are intentionally tight (lines 85% / statements 85% / branches 78% / functions 95%). New code is expected to come with tests. If you're adding a chunker or a pure helper, write tests for it the same PR.
 
