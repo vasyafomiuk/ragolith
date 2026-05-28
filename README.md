@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo.svg" alt="ragolith" width="520">
-  </picture>
+  <img src="assets/ragolith.png" alt="ragolith" width="520">
 </p>
 
 <p align="center">
