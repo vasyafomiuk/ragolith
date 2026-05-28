@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ragolith dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <a href="#home" class="brand">
+          <span class="mark"></span>
+          <span class="name">ragolith</span>
+        </a>
+        <nav>
+          <a href="#home" data-route="home">Projects</a>
+          <a href="#search" data-route="search">Search</a>
+          <a href="#health" data-route="health">Health</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Each view is hidden until activated by hash routing in app.js. -->
+      <section id="view-home" class="view" hidden>
+        <h1>Indexed projects</h1>
+        <p class="muted" id="home-empty" hidden>
+          No projects yet. Run <code>ragolith-ingest</code> after editing
+          <code>ragc.config.json</code> to populate the index.
+        </p>
+        <table id="home-table" hidden>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th class="num">Files</th>
+              <th class="num">Chunks</th>
+              <th>Languages</th>
+              <th>Last commit</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="home-body"></tbody>
+        </table>
+      </section>
+
+      <section id="view-search" class="view" hidden>
+        <h1>Search</h1>
+        <form id="search-form">
+          <input
+            id="search-input"
+            type="text"
+            placeholder="natural-language query or identifier"
+            autocomplete="off"
+            required
+          />
+          <select id="search-project">
+            <option value="">all projects</option>
+          </select>
+          <button type="submit">Search</button>
+        </form>
+        <p class="muted" id="search-status"></p>
+        <ol id="search-results" class="hits"></ol>
+      </section>
+
+      <section id="view-project" class="view" hidden>
+        <a href="#home" class="back">← back to projects</a>
+        <h1 id="project-title">project</h1>
+        <p class="muted" id="project-meta"></p>
+        <table id="project-files">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Language</th>
+              <th class="num">Chunks</th>
+            </tr>
+          </thead>
+          <tbody id="project-body"></tbody>
+        </table>
+      </section>
+
+      <section id="view-health" class="view" hidden>
+        <h1>Health</h1>
+        <div id="health-grid" class="health-grid"></div>
+        <details class="dump">
+          <summary>Raw JSON</summary>
+          <pre id="health-dump"></pre>
+        </details>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container">
+        <span class="muted">ragolith dashboard · localhost only</span>
+        <a href="https://github.com/vasyafomiuk/ragolith" target="_blank" rel="noopener">github</a>
+      </div>
+    </footer>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

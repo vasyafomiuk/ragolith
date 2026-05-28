@@ -20,6 +20,7 @@ A RAG pipeline that indexes git repositories and documents into Weaviate, then e
 - **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate.
 - **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter.
 - **Serve** — an MCP server over stdio that exposes ~10 tools (search, find symbol, file structure, callers/callees, etc.) for any MCP-aware LLM client.
+- **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, and check stack health.
 - **Backup** — Weaviate filesystem backups with optional S3 push/pull.
 
 All embeddings and reranking run locally in Docker — no external API keys needed.
@@ -52,6 +53,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 | Component        | File                                  | Role                                                                      |
 | ---------------- | ------------------------------------- | ------------------------------------------------------------------------- |
 | MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                          |
+| Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health       |
 | Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                     |
 | Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                    |
 | AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges |
@@ -110,7 +112,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 npm install -g ragolith
 ```
 
-This puts three CLIs on your PATH: `ragolith-server`, `ragolith-ingest`, `ragolith-backup`. No source clone needed.
+This puts four CLIs on your PATH: `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`. No source clone needed.
 
 ### From source
 
@@ -245,6 +247,29 @@ VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mc
 ### Smoke-testing without a client
 
 Once wired, you can call any of the 10 tools (`search`, `find_symbol`, `file_structure`, `read_chunk`, `callers_of`, `callees_of`, `list_projects`, `list_files`, `search_code`, `search_docs`) directly through the client's tool UI. The integration test in [`tests/integration/end-to-end.test.ts`](tests/integration/end-to-end.test.ts) shows the same calls made programmatically with the MCP SDK.
+
+## Dashboard
+
+A localhost web UI for browsing your index, debugging chunkers, and checking stack health — no MCP client needed.
+
+```bash
+ragolith-dashboard --open    # opens http://127.0.0.1:7777 in your browser
+```
+
+| Flag                | Default     | What it does                                                                                             |
+| ------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `-p, --port <port>` | `7777`      | Port to listen on                                                                                        |
+| `-h, --host <host>` | `127.0.0.1` | Bind host. Stays localhost-only by default — pass `0.0.0.0` only if you understand the network exposure. |
+| `-o, --open`        | `false`     | Open the URL in your default browser on start                                                            |
+
+The dashboard has four views:
+
+- **Projects** — table of indexed projects with file/chunk counts, language breakdown, last-ingested commit SHA, and update time. Click a row to drill into per-file chunk counts.
+- **Search** — runs the same hybrid pipeline as the MCP server. Optional project filter. Results show file path, line range, chunk type, language, score, and content excerpt. Useful for "why didn't my query return what I expected?"
+- **Project detail** — per-file chunk counts and language tags, sorted by path. Useful for "did the chunker actually process my repo correctly?"
+- **Health** — coloured indicators for Weaviate HTTP / gRPC reachability, embedder + reranker module presence, and ingest-state-file presence. Raw JSON dump expandable.
+
+The dashboard never writes to Weaviate; it's read-only.
 
 ## Config precedence
 

@@ -71,6 +71,25 @@ export default tseslint.config(
     },
   },
 
+  // Dashboard frontend — browser JS, no TypeScript, runs in a tab.
+  {
+    files: ['src/dashboard/public/**/*.js'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+      // app.js is plain JS, the TS-eslint rules don't apply.
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+
   // Prettier compat must come last so it overrides any stylistic rules
   // that would conflict with the formatter.
   prettier,

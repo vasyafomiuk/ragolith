@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Enforce architectural layering between src/core, src/mcp, src/cli.
+// Enforce architectural layering between src/core, src/mcp, src/cli, src/dashboard.
 //
 // Rules:
-//   - core/ MUST NOT import from mcp/ or cli/
-//   - mcp/  MUST NOT import from cli/
-//   - cli/  MUST NOT import from mcp/
+//   - core/      MUST NOT import from mcp/, cli/, or dashboard/
+//   - mcp/       MUST NOT import from cli/ or dashboard/
+//   - cli/       MUST NOT import from mcp/ or dashboard/
+//   - dashboard/ MUST NOT import from mcp/ or cli/
 //
-// In other words: `core` is the foundation, `mcp` and `cli` are sibling
-// adapters that each reach into core but never into each other.
+// `core` is the foundation; `mcp`, `cli`, `dashboard` are sibling adapters
+// that each reach into core but never into each other.
 //
 // Run via `npm run check:layers`. Exits non-zero on the first violation,
 // so it doubles as a CI gate.
@@ -21,9 +22,10 @@ const srcRoot = join(root, 'src');
 
 /** Layer → set of layer names it is *not* allowed to import from. */
 const FORBIDDEN = {
-  core: new Set(['mcp', 'cli']),
-  mcp: new Set(['cli']),
-  cli: new Set(['mcp']),
+  core: new Set(['mcp', 'cli', 'dashboard']),
+  mcp: new Set(['cli', 'dashboard']),
+  cli: new Set(['mcp', 'dashboard']),
+  dashboard: new Set(['mcp', 'cli']),
 };
 
 async function walk(dir) {

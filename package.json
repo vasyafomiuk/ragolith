@@ -36,6 +36,7 @@
   "files": [
     "dist/**/*.js",
     "dist/**/*.js.map",
+    "dist/dashboard/public/**",
     "docker-compose.yml",
     "docker-compose.integration.yml",
     "ragc.config.example.json",
@@ -46,7 +47,8 @@
   "bin": {
     "ragolith-server": "./dist/mcp/server.js",
     "ragolith-ingest": "./dist/cli/ingest.js",
-    "ragolith-backup": "./dist/cli/backup.js"
+    "ragolith-backup": "./dist/cli/backup.js",
+    "ragolith-dashboard": "./dist/dashboard/server.js"
   },
   "exports": {
     ".": "./dist/core/index.js",
@@ -54,7 +56,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-dashboard-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run all",
     "all": "npm run check:layers && npm run lint && npm run format:check && npm run typecheck && npm run coverage && npm run build",
@@ -72,6 +74,7 @@
     "server": "tsx src/mcp/server.ts",
     "ingest": "tsx src/cli/ingest.ts",
     "backup": "tsx src/cli/backup.ts",
+    "dashboard": "tsx src/dashboard/server.ts",
     "weaviate:up": "docker compose up -d",
     "weaviate:down": "docker compose down",
     "weaviate:logs": "docker compose logs -f weaviate"

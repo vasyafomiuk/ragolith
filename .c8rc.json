@@ -8,6 +8,7 @@
     "src/core/types.ts",
     "src/cli/**",
     "src/mcp/**",
+    "src/dashboard/**",
     "src/core/weaviate-client.ts",
     "src/core/git-manager.ts"
   ],

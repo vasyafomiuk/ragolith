@@ -6,7 +6,8 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
-- **Published to npm as [`ragolith`](https://www.npmjs.com/package/ragolith)**. `npm install -g ragolith` puts `ragolith-server`, `ragolith-ingest`, `ragolith-backup` on your PATH. Source clone no longer required.
+- **Localhost web dashboard** (`ragolith-dashboard`). New fourth binary. Four views: indexed-projects table with file/chunk counts and language breakdown, hybrid-search box with same pipeline as the MCP server, per-project file drill-down, stack-health probe (Weaviate HTTP/gRPC, embedder, reranker, ingest state file). Vanilla HTML+JS, no bundler. Localhost-only by default. New `dashboard` layer in `src/dashboard/`, enforced by `scripts/check-layers.mjs`.
+- **Published to npm as [`ragolith`](https://www.npmjs.com/package/ragolith)**. `npm install -g ragolith` puts `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard` on your PATH. Source clone no longer required.
 - **Release workflow** (`.github/workflows/release.yml`) publishes via **npm Trusted Publishing** (OIDC) on `v*` tag push — no long-lived NPM_TOKEN, no 2FA-bypass tokens, no secrets to leak. Each tarball carries a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) signed by GitHub Actions and verifiable against the exact commit + workflow run.
 - **Layered source layout**: `src/core/`, `src/mcp/`, `src/cli/`. The `core` layer is the public surface (re-exported through `src/core/index.ts`); `mcp` and `cli` are sibling adapters. Boundary enforced by `scripts/check-layers.mjs` + a CI step.
 - **Chunker dispatch** moved into `src/core/chunkers/dispatch.ts` so any future transport can reuse it (not just the ingest CLI).
