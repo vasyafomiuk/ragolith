@@ -18,6 +18,7 @@ import { loadConfig, resetConfigCache } from '../core/config.js';
 import { connect, CODE_CHUNK } from '../core/weaviate-client.js';
 import { search } from '../core/search.js';
 import { health as coreHealth, type HealthStatus } from '../core/health.js';
+import { loadRegistry, type SnapshotRecord } from '../core/backups-registry.js';
 import type { IngestState, Language, RagolithConfig, SearchHit } from '../core/types.js';
 
 export type { HealthStatus };
@@ -193,6 +194,17 @@ export async function projectFiles(
     .sort((a, b) => a.file_path.localeCompare(b.file_path));
 }
 
+// --- snapshot registry ----------------------------------------------------
+
+export type { SnapshotRecord };
+
+/** Snapshots in the on-disk registry, newest first. */
+export function listSnapshots(): SnapshotRecord[] {
+  const reg = loadRegistry();
+  // String compare on ISO timestamps is the lexicographic == chronological order.
+  return reg.snapshots.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 // --- config read/write ----------------------------------------------------
 
 function configPath(): string {
@@ -360,8 +372,12 @@ export function getActiveJob(): JobState | null {
   return activeJob ? activeJob.state : null;
 }
 
-/** Lightweight id validation — keeps shell-flavored characters out. */
-const ID_RE = /^[A-Za-z0-9._-]+$/;
+/**
+ * Backup id validation. Weaviate enforces `[a-z0-9_-]+` server-side; we mirror
+ * that here so the user gets an instant 400 instead of waiting for the child
+ * to spawn just to get rejected by Weaviate.
+ */
+const ID_RE = /^[a-z0-9_-]+$/;
 
 function startJob(kind: JobKind, args: string[]): JobState {
   if (activeJob && activeJob.state.status === 'running') {
@@ -433,7 +449,7 @@ export function startBackup(opts: BackupOptions): JobState {
     // create / restore / push / pull all take an id positional.
     if (!opts.id || !ID_RE.test(opts.id)) {
       throw new Error(
-        `backup id must be non-empty and match ${ID_RE.source} (letters, digits, ., _ or -)`,
+        `backup id must be non-empty and match ${ID_RE.source} (lowercase letters, digits, _ or -)`,
       );
     }
     args.push(opts.id);

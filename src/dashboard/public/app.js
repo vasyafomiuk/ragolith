@@ -661,7 +661,151 @@ function attachBackupListener() {
 async function enterBackupView() {
   attachBackupListener();
   await reflectActiveJob(setBackupStatus, setBackupRunningUI, 'backup');
+  prefillSnapshotIdIfEmpty();
+  await loadSnapshotList();
 }
+
+/**
+ * Pick a default id for the create-snapshot input so the user can just hit
+ * the button. Only sets the value if the user hasn't typed something.
+ *
+ * Weaviate is strict about backup ids: `[a-z0-9_-]+` only — no dots, no
+ * uppercase, no colons. We lowercase the ISO stamp and replace `T`/`:` with
+ * dashes to satisfy that.
+ *
+ * Example: snapshot-2026-05-28-14-30-22
+ */
+function prefillSnapshotIdIfEmpty() {
+  const input = $('backup-create-id');
+  if (!input || input.value.trim() !== '') return;
+  // toISOString → "2026-05-28T14:30:22.123Z". Strip ms+Z, replace T and colons.
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-').toLowerCase();
+  input.value = `snapshot-${stamp}`;
+}
+
+function fmtSnapshotTime(iso) {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+async function loadSnapshotList() {
+  const body = $('backup-list-body');
+  const table = $('backup-table');
+  const empty = $('backup-empty');
+  if (!body || !table || !empty) return;
+  try {
+    const data = await api('/api/backups');
+    const snapshots = Array.isArray(data?.snapshots) ? data.snapshots : [];
+    if (snapshots.length === 0) {
+      table.hidden = true;
+      empty.hidden = false;
+      body.innerHTML = '';
+      return;
+    }
+    table.hidden = false;
+    empty.hidden = true;
+    body.innerHTML = '';
+    for (const s of snapshots) {
+      const tr = document.createElement('tr');
+      tr.dataset.snapshotId = s.id;
+
+      const idCell = document.createElement('td');
+      const code = document.createElement('code');
+      code.textContent = s.id;
+      idCell.appendChild(code);
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-' + (s.status === 'success' ? 'success' : 'failed');
+      badge.textContent = s.status;
+      statusCell.appendChild(badge);
+
+      const createdCell = document.createElement('td');
+      createdCell.className = 'muted small';
+      createdCell.textContent = fmtSnapshotTime(s.createdAt);
+
+      const s3Cell = document.createElement('td');
+      s3Cell.textContent = s.pushedToS3 ? '✓' : '';
+      s3Cell.className = 'muted small';
+
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'num';
+      const restoreBtn = document.createElement('button');
+      restoreBtn.type = 'button';
+      restoreBtn.className = 'btn btn-ghost btn-sm';
+      restoreBtn.textContent = 'Restore';
+      restoreBtn.addEventListener('click', () => triggerRowRestore(s.id));
+      actionsCell.appendChild(restoreBtn);
+
+      if (!s.pushedToS3) {
+        const pushBtn = document.createElement('button');
+        pushBtn.type = 'button';
+        pushBtn.className = 'btn btn-ghost btn-sm';
+        pushBtn.textContent = 'Push to S3';
+        pushBtn.style.marginLeft = '6px';
+        pushBtn.addEventListener('click', () => triggerRowPush(s.id));
+        actionsCell.appendChild(pushBtn);
+      }
+
+      tr.appendChild(idCell);
+      tr.appendChild(statusCell);
+      tr.appendChild(createdCell);
+      tr.appendChild(s3Cell);
+      tr.appendChild(actionsCell);
+      body.appendChild(tr);
+    }
+  } catch (err) {
+    table.hidden = true;
+    empty.hidden = false;
+    empty.textContent = `Couldn't load snapshot list: ${err.message}`;
+  }
+}
+
+function triggerRowRestore(id) {
+  // Fill the Restore-by-id input so the confirm dialog and the request agree
+  // on what we're restoring, then go through the same handler everyone else
+  // does (which contains the confirm prompt).
+  $('backup-restore-id').value = id;
+  $('backup-restore-pull').checked = false;
+  $('backup-restore').click();
+}
+
+function triggerRowPush(id) {
+  $('backup-s3-id').value = id;
+  $('backup-push').click();
+}
+
+// Refresh the snapshot list whenever a backup job finishes. We track the
+// active job's args via the `start` event so the `exit` handler can tell
+// whether to also reset the create-id field (so prefill picks a new
+// timestamp next time the view is entered).
+let lastBackupArgs = null;
+listenJobs((payload) => {
+  if (payload.kind !== 'backup') return;
+  if (payload.type === 'start') {
+    lastBackupArgs = payload.job?.args ?? null;
+  } else if (payload.type === 'exit') {
+    // small debounce so the registry's atomic write definitely lands first
+    setTimeout(() => {
+      void loadSnapshotList();
+      if (
+        payload.code === 0 &&
+        Array.isArray(lastBackupArgs) &&
+        lastBackupArgs.some((a) => a === 'create')
+      ) {
+        const input = $('backup-create-id');
+        if (input) input.value = '';
+        prefillSnapshotIdIfEmpty();
+      }
+      lastBackupArgs = null;
+    }, 150);
+  }
+});
 
 async function runBackup(opts) {
   try {
@@ -731,6 +875,10 @@ $('backup-pull').addEventListener('click', () => {
   const id = readBackupId('backup-s3-id', 'pull');
   if (!id) return;
   runBackup({ command: 'pull', id });
+});
+
+$('backup-refresh').addEventListener('click', () => {
+  void loadSnapshotList();
 });
 
 function fillForm(cfg) {

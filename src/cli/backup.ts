@@ -8,6 +8,7 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../core/config.js';
+import { markPushedToS3, recordSnapshot } from '../core/backups-registry.js';
 
 const program = new Command();
 program.name('ragolith-backup').description('Manage Weaviate backups (filesystem or S3 backend).');
@@ -120,8 +121,28 @@ program
   .option('--push-s3', 'After creating, push the backup to S3', false)
   .action(async (id: string, opts: { pushS3?: boolean }) => {
     const cfg = loadConfig();
-    await createBackup(id, cfg.backup.backend);
-    if (opts.pushS3) await s3Push(id);
+    try {
+      await createBackup(id, cfg.backup.backend);
+    } catch (err) {
+      // Record the failed attempt so the dashboard can show it.
+      await recordSnapshot({
+        id,
+        backend: cfg.backup.backend,
+        createdAt: new Date().toISOString(),
+        status: 'failed',
+      });
+      throw err;
+    }
+    await recordSnapshot({
+      id,
+      backend: cfg.backup.backend,
+      createdAt: new Date().toISOString(),
+      status: 'success',
+    });
+    if (opts.pushS3) {
+      await s3Push(id);
+      await markPushedToS3(id, cfg.backup.backend);
+    }
     process.stderr.write(`[backup] create ${id} done\n`);
   });
 
@@ -140,7 +161,9 @@ program
   .command('push <id>')
   .description('Push an existing local backup to S3')
   .action(async (id: string) => {
+    const cfg = loadConfig();
     await s3Push(id);
+    await markPushedToS3(id, cfg.backup.backend);
   });
 
 program
@@ -168,7 +191,23 @@ program
 
     // Snapshot whatever's currently indexed.
     process.stderr.write(`[backup-verify] creating snapshot…\n`);
-    await createBackup(id, cfg.backup.backend);
+    try {
+      await createBackup(id, cfg.backup.backend);
+    } catch (err) {
+      await recordSnapshot({
+        id,
+        backend: cfg.backup.backend,
+        createdAt: new Date().toISOString(),
+        status: 'failed',
+      });
+      throw err;
+    }
+    await recordSnapshot({
+      id,
+      backend: cfg.backup.backend,
+      createdAt: new Date().toISOString(),
+      status: 'success',
+    });
 
     // Re-restore on top of the existing data is a no-op (Weaviate refuses if
     // the collections already exist), so the verify simply confirms the

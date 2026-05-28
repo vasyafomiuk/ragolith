@@ -209,6 +209,35 @@
           </header>
 
           <div class="card section">
+            <h2 class="section-h">
+              <span>Existing snapshots</span>
+              <button type="button" id="backup-refresh" class="btn btn-ghost btn-sm">
+                Refresh
+              </button>
+            </h2>
+            <p class="muted small" id="backup-empty" hidden>
+              No snapshots tracked yet. Create one below and it'll show up here.
+            </p>
+            <table id="backup-table" hidden>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>S3</th>
+                  <th class="num"></th>
+                </tr>
+              </thead>
+              <tbody id="backup-list-body"></tbody>
+            </table>
+            <p class="muted small">
+              Tracked from snapshots created through ragolith (dashboard or
+              <code>ragolith-backup</code> CLI). Snapshots created by hitting Weaviate's REST API
+              directly won't appear here.
+            </p>
+          </div>
+
+          <div class="card section">
             <h2 class="section-h">Create snapshot</h2>
             <p class="muted small">
               Writes to the backup volume configured in
@@ -232,10 +261,11 @@
           </div>
 
           <div class="card section">
-            <h2 class="section-h">Restore</h2>
+            <h2 class="section-h">Restore by id</h2>
             <p class="muted small">
-              Weaviate refuses to restore on top of existing collections — drop or rename them first
-              if you want a clean replay.
+              For untracked snapshots — pick a row from "Existing snapshots" above to skip typing.
+              Weaviate refuses to restore on top of existing collections, so drop or rename them
+              first.
             </p>
             <div class="run-row">
               <input

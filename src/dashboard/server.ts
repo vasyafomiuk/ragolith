@@ -14,6 +14,7 @@
 //   PUT  /api/config                → write a new ragc.config.json (atomic)
 //   POST /api/ingest                → spawn ragolith-ingest as a job
 //   POST /api/backup                → spawn ragolith-backup as a job
+//   GET  /api/backups               → SnapshotRecord[] from the local registry
 //   GET  /api/jobs/active           → currently-running job or { id: null }
 //   GET  /api/jobs/stream           → SSE feed of job start/log/exit events
 //
@@ -33,6 +34,7 @@ import { spawn } from 'node:child_process';
 import {
   getActiveJob,
   health,
+  listSnapshots,
   projects,
   projectFiles,
   readConfig,
@@ -155,6 +157,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         } catch (err) {
           sendJson(res, 409, { error: err instanceof Error ? err.message : String(err) });
         }
+        return;
+      }
+      if (method === 'GET' && url === '/api/backups') {
+        sendJson(res, 200, { snapshots: listSnapshots() });
         return;
       }
       if (method === 'POST' && url === '/api/backup') {
