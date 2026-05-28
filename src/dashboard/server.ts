@@ -24,7 +24,15 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 
-import { health, projects, projectFiles, runSearch, type SearchRequest } from './api.js';
+import {
+  health,
+  projects,
+  projectFiles,
+  readConfig,
+  runSearch,
+  writeConfig,
+  type SearchRequest,
+} from './api.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(__dirname, 'public');
@@ -112,6 +120,27 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
           return;
         }
         sendJson(res, 200, await runSearch(body));
+        return;
+      }
+      if (method === 'GET' && url === '/api/config') {
+        sendJson(res, 200, readConfig());
+        return;
+      }
+      if (method === 'PUT' && url === '/api/config') {
+        const raw = await readBody(req);
+        let body: unknown;
+        try {
+          body = JSON.parse(raw);
+        } catch (err) {
+          sendJson(res, 400, { error: `body is not valid JSON: ${String(err)}` });
+          return;
+        }
+        try {
+          const result = await writeConfig(body);
+          sendJson(res, 200, result);
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
         return;
       }
       sendJson(res, 404, { error: 'unknown route' });

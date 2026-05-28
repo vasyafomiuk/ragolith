@@ -81,6 +81,8 @@ export default tseslint.config(
         fetch: 'readonly',
         console: 'readonly',
         URL: 'readonly',
+        HTMLElement: 'readonly',
+        HTMLInputElement: 'readonly',
       },
     },
     rules: {

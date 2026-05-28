@@ -3,146 +3,226 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#ffffff" />
     <title>ragolith dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="stars" aria-hidden="true"></div>
-    <div class="moonglow" aria-hidden="true"></div>
-    <div class="grain" aria-hidden="true"></div>
-
-    <header class="site-header">
-      <a href="#home" class="brand" aria-label="Ragolith dashboard home">
+    <header class="topbar">
+      <a href="#projects" class="brand" aria-label="Ragolith dashboard home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-text">RAGOLITH</span>
-        <span class="brand-suffix">/ DASHBOARD</span>
+        <span class="brand-text">ragolith</span>
+        <span class="brand-suffix">dashboard</span>
       </a>
-      <nav class="site-nav" aria-label="Primary">
-        <a href="#home" data-route="home">Projects</a>
-        <a href="#search" data-route="search">Search</a>
-        <a href="#health" data-route="health">Health</a>
+      <div class="topbar-right">
+        <span class="topbar-meta" id="topbar-host"></span>
         <a
           href="https://github.com/vasyafomiuk/ragolith"
-          class="nav-github"
+          class="topbar-link"
           target="_blank"
           rel="noopener"
-          aria-label="Ragolith on GitHub"
+          >GitHub ↗</a
         >
-          GitHub <span aria-hidden="true">↗</span>
-        </a>
-      </nav>
+      </div>
     </header>
 
-    <main>
-      <section id="view-home" class="view view-home" hidden>
-        <div class="section-eyebrow">— INDEXED CONTENT</div>
-        <h1 class="section-title">Your knowledge base.</h1>
-        <p class="section-lead muted" id="home-empty" hidden>
-          No projects yet. Run <code>ragolith-ingest</code> after editing
-          <code>ragc.config.json</code> to populate the index.
-        </p>
-        <div class="table-frame" id="home-table-wrap" hidden>
-          <table id="home-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th class="num">Files</th>
-                <th class="num">Chunks</th>
-                <th>Languages</th>
-                <th>Last commit</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody id="home-body"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="view-search" class="view view-search" hidden>
-        <div class="section-eyebrow">— HYBRID RETRIEVAL</div>
-        <h1 class="section-title">Search the index.</h1>
-        <p class="section-lead">
-          Same pipeline the MCP server uses: BM25 + vector, cross-encoder rerank, autocut, diversity
-          filter.
-        </p>
-        <form id="search-form" class="search-form">
-          <input
-            id="search-input"
-            type="text"
-            placeholder="natural-language query or identifier"
-            autocomplete="off"
-            required
-          />
-          <select id="search-project">
-            <option value="">all projects</option>
-          </select>
-          <button type="submit" class="btn btn-primary">Search</button>
-        </form>
-        <p class="search-status muted" id="search-status"></p>
-        <ol id="search-results" class="hits"></ol>
-      </section>
-
-      <section id="view-project" class="view view-project" hidden>
-        <a href="#home" class="back-link">← back to projects</a>
-        <div class="section-eyebrow" id="project-eyebrow">— PROJECT</div>
-        <h1 class="section-title" id="project-title">project</h1>
-        <p class="section-lead muted" id="project-meta"></p>
-        <div class="table-frame">
-          <table id="project-files">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Language</th>
-                <th class="num">Chunks</th>
-              </tr>
-            </thead>
-            <tbody id="project-body"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="view-health" class="view view-health" hidden>
-        <div class="section-eyebrow">— STACK STATUS</div>
-        <h1 class="section-title">Health.</h1>
-        <p class="section-lead">
-          Live probe of Weaviate, the embedder, the reranker, and your ingest state file.
-        </p>
-        <div id="health-grid" class="pillars-grid"></div>
-        <details class="dump">
-          <summary>Raw JSON</summary>
-          <div class="code-frame">
-            <div class="code-frame-bar" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
-            <pre id="health-dump" class="code"></pre>
-          </div>
-        </details>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <div class="footer-row">
-        <a href="#home" class="brand" aria-label="Ragolith home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span class="brand-text">RAGOLITH</span>
-        </a>
-        <div class="footer-meta">
-          <span>localhost only</span>
-          <span class="dot">·</span>
-          <a href="https://github.com/vasyafomiuk/ragolith" target="_blank" rel="noopener">
-            github.com/vasyafomiuk/ragolith
+    <div class="layout">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <nav>
+          <a href="#projects" class="navlink" data-route="projects">
+            <span class="navlink-bullet"></span>
+            <span>Projects</span>
           </a>
+          <a href="#search" class="navlink" data-route="search">
+            <span class="navlink-bullet"></span>
+            <span>Search</span>
+          </a>
+          <a href="#config" class="navlink" data-route="config">
+            <span class="navlink-bullet"></span>
+            <span>Config</span>
+          </a>
+          <a href="#health" class="navlink" data-route="health">
+            <span class="navlink-bullet"></span>
+            <span>Health</span>
+          </a>
+        </nav>
+        <div class="sidebar-foot">
+          <span class="muted">v0.1 · localhost only</span>
         </div>
-      </div>
-      <div class="footer-tagline">Solid ground for AI-native software.</div>
-    </footer>
+      </aside>
+
+      <main class="main">
+        <!-- Projects -->
+        <section id="view-projects" class="view" hidden>
+          <header class="view-head">
+            <h1>Projects</h1>
+            <p class="lead">Everything currently indexed.</p>
+          </header>
+          <div class="empty" id="projects-empty" hidden>
+            No projects yet. Open <a href="#config">Config</a> to add one, or run
+            <code>ragolith-ingest</code> after editing <code>ragc.config.json</code>.
+          </div>
+          <div class="card" id="projects-card" hidden>
+            <table id="projects-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th class="num">Files</th>
+                  <th class="num">Chunks</th>
+                  <th>Languages</th>
+                  <th>Commit</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody id="projects-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Search -->
+        <section id="view-search" class="view" hidden>
+          <header class="view-head">
+            <h1>Search</h1>
+            <p class="lead">Hybrid retrieval (BM25 + vector) with optional cross-encoder rerank.</p>
+          </header>
+          <form id="search-form" class="search-form">
+            <input
+              id="search-input"
+              type="text"
+              placeholder="natural-language query or identifier"
+              autocomplete="off"
+              required
+            />
+            <select id="search-project" aria-label="Project filter">
+              <option value="">all projects</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Search</button>
+          </form>
+          <p class="status" id="search-status"></p>
+          <ol id="search-results" class="hits"></ol>
+        </section>
+
+        <!-- Project detail -->
+        <section id="view-project" class="view" hidden>
+          <a href="#projects" class="back-link">← back to projects</a>
+          <header class="view-head">
+            <h1 id="project-title">project</h1>
+            <p class="lead" id="project-meta"></p>
+          </header>
+          <div class="card">
+            <table id="project-files">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Language</th>
+                  <th class="num">Chunks</th>
+                </tr>
+              </thead>
+              <tbody id="project-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Config -->
+        <section id="view-config" class="view" hidden>
+          <header class="view-head">
+            <h1>Config</h1>
+            <p class="lead">
+              Editing <code id="config-path">ragc.config.json</code>. Saved changes take effect on
+              the next <code>ragolith-ingest</code> / <code>ragolith-server</code> run.
+            </p>
+          </header>
+          <div class="config-toolbar">
+            <button type="button" id="config-reload" class="btn btn-ghost">Reload from disk</button>
+            <button type="button" id="config-save" class="btn btn-primary">Save</button>
+            <span id="config-status" class="status"></span>
+          </div>
+          <div class="config-tabs">
+            <button type="button" class="config-tab active" data-config-tab="form">Form</button>
+            <button type="button" class="config-tab" data-config-tab="json">Raw JSON</button>
+          </div>
+
+          <div id="config-form" class="config-pane active">
+            <div class="card section">
+              <h2 class="section-h">Weaviate connection</h2>
+              <div class="grid grid-2">
+                <label>
+                  <span>Host</span>
+                  <input type="text" id="cfg-weaviate-host" />
+                </label>
+                <label>
+                  <span>HTTP port</span>
+                  <input type="number" id="cfg-weaviate-http" min="1" max="65535" />
+                </label>
+                <label>
+                  <span>gRPC port</span>
+                  <input type="number" id="cfg-weaviate-grpc" min="1" max="65535" />
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" id="cfg-weaviate-secure" />
+                  <span>Use TLS (https / grpcs)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="card section">
+              <h2 class="section-h">Search</h2>
+              <label class="checkbox">
+                <input type="checkbox" id="cfg-search-reranker" />
+                <span>Enable cross-encoder reranker (stage 4 of the search pipeline)</span>
+              </label>
+            </div>
+
+            <div class="card section">
+              <h2 class="section-h">
+                Projects
+                <button type="button" id="cfg-add-project" class="btn btn-ghost btn-sm">
+                  + Add project
+                </button>
+              </h2>
+              <div id="cfg-projects-list" class="repeating"></div>
+            </div>
+
+            <div class="card section">
+              <h2 class="section-h">
+                Standalone files
+                <button type="button" id="cfg-add-file" class="btn btn-ghost btn-sm">
+                  + Add file
+                </button>
+              </h2>
+              <div id="cfg-files-list" class="repeating"></div>
+            </div>
+          </div>
+
+          <div id="config-json" class="config-pane">
+            <p class="muted small">
+              Edits here override the form. Save replaces the file verbatim.
+            </p>
+            <textarea id="cfg-raw" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <!-- Health -->
+        <section id="view-health" class="view" hidden>
+          <header class="view-head">
+            <h1>Health</h1>
+            <p class="lead">Live probe of the stack.</p>
+          </header>
+          <div id="health-grid" class="health-grid"></div>
+          <details class="raw">
+            <summary>Raw JSON</summary>
+            <pre id="health-dump" class="codeblock"></pre>
+          </details>
+        </section>
+      </main>
+    </div>
 
     <script src="/app.js" type="module"></script>
   </body>
