@@ -1,0 +1,66 @@
+{
+  "name": "ragolith",
+  "version": "0.1.0",
+  "description": "RAG pipeline that indexes git repositories and documents into Weaviate, then exposes semantic search to LLM clients via MCP (Model Context Protocol) over stdio.",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Vasyl Fomiuk",
+    "url": "https://github.com/vasyafomiuk"
+  },
+  "homepage": "https://github.com/vasyafomiuk/ragolith#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vasyafomiuk/ragolith.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vasyafomiuk/ragolith/issues"
+  },
+  "keywords": [
+    "rag",
+    "mcp",
+    "model-context-protocol",
+    "weaviate",
+    "semantic-search",
+    "code-search",
+    "vector-database",
+    "embeddings",
+    "llm",
+    "claude",
+    "ast",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "ragolith-server": "./dist/server.js",
+    "ragolith-ingest": "./dist/ingest.js",
+    "ragolith-backup": "./dist/backup.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "server": "tsx src/server.ts",
+    "ingest": "tsx src/ingest.ts",
+    "backup": "tsx src/backup.ts",
+    "weaviate:up": "docker compose up -d",
+    "weaviate:down": "docker compose down",
+    "weaviate:logs": "docker compose logs -f weaviate"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "commander": "^12.1.0",
+    "ignore": "^5.3.2",
+    "mammoth": "^1.8.0",
+    "pdfjs-dist": "^4.10.38",
+    "simple-git": "^3.27.0",
+    "typescript": "^5.6.3",
+    "weaviate-client": "^3.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "tsx": "^4.19.2"
+  }
+}

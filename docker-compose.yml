@@ -1,0 +1,46 @@
+# All-local stack: Weaviate + text2vec-transformers + cross-encoder reranker.
+# No external API keys needed.
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.28.0
+    container_name: ragolith-weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP
+      - "50051:50051" # gRPC (used by weaviate-client v3 for batch)
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: text2vec-transformers
+      ENABLE_MODULES: text2vec-transformers,reranker-transformers,backup-filesystem,backup-s3
+      TRANSFORMERS_INFERENCE_API: http://t2v-transformers:8080
+      RERANKER_INFERENCE_API: http://reranker-transformers:8080
+      BACKUP_FILESYSTEM_PATH: "/var/lib/weaviate-backups"
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+      - weaviate_backups:/var/lib/weaviate-backups
+    depends_on:
+      - t2v-transformers
+      - reranker-transformers
+
+  # MiniLM-L6: small, fast sentence embeddings. ~80MB.
+  t2v-transformers:
+    image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    container_name: ragolith-t2v
+    restart: unless-stopped
+    environment:
+      ENABLE_CUDA: "0"
+
+  # Cross-encoder reranker: ms-marco-MiniLM, used in stage 4 of the search pipeline.
+  reranker-transformers:
+    image: cr.weaviate.io/semitechnologies/reranker-transformers:cross-encoder-ms-marco-MiniLM-L-6-v2
+    container_name: ragolith-reranker
+    restart: unless-stopped
+    environment:
+      ENABLE_CUDA: "0"
+
+volumes:
+  weaviate_data:
+  weaviate_backups:

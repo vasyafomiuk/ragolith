@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+
+# Local user config (may contain tokens/repo URLs)
+ragc.config.json
+
+# Local state
+data.json
+.ragolith/
+.weaviate-data/
+
+# Editor / tool-local settings
+.vscode/
+.idea/
+.claude/
+.DS_Store
