@@ -10,7 +10,8 @@
     "src/mcp/**",
     "src/dashboard/**",
     "src/core/weaviate-client.ts",
-    "src/core/git-manager.ts"
+    "src/core/git-manager.ts",
+    "src/core/health.ts"
   ],
   "exclude-after-remap": true,
   "reporter": ["text", "text-summary", "html", "lcov", "json-summary"],

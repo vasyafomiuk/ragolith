@@ -26,10 +26,14 @@ services:
       - reranker-transformers
 
   # MiniLM-L6: small, fast sentence embeddings. ~80MB.
+  # mem_limit caps the process — these models hold weights in memory and the
+  # Python runtime is happy to grow under load. Without a ceiling a large
+  # ingest can starve other containers on the host.
   t2v-transformers:
     image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
     container_name: ragolith-t2v
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ENABLE_CUDA: '0'
 
@@ -38,6 +42,7 @@ services:
     image: cr.weaviate.io/semitechnologies/reranker-transformers:cross-encoder-ms-marco-MiniLM-L-6-v2
     container_name: ragolith-reranker
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ENABLE_CUDA: '0'
 

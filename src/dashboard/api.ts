@@ -14,29 +14,10 @@ import type { WeaviateClient } from 'weaviate-client';
 import { loadConfig } from '../core/config.js';
 import { connect, CODE_CHUNK } from '../core/weaviate-client.js';
 import { search } from '../core/search.js';
+import { health as coreHealth, type HealthStatus } from '../core/health.js';
 import type { IngestState, Language, SearchHit } from '../core/types.js';
 
-export interface HealthStatus {
-  weaviate: {
-    http: boolean;
-    grpc: boolean;
-    error?: string;
-  };
-  embedder: {
-    reachable: boolean;
-    error?: string;
-  };
-  reranker: {
-    reachable: boolean;
-    enabled: boolean;
-  };
-  state: {
-    path: string;
-    exists: boolean;
-    projects: string[];
-    files: string[];
-  };
-}
+export type { HealthStatus };
 
 export interface ProjectSummary {
   name: string;
@@ -49,7 +30,6 @@ export interface ProjectSummary {
 }
 
 let cachedClient: WeaviateClient | undefined;
-let lastConnectError: string | undefined;
 
 /** Lazily connect; cache the client so we don't reopen on every request. */
 async function getClient(): Promise<WeaviateClient | undefined> {
@@ -57,10 +37,8 @@ async function getClient(): Promise<WeaviateClient | undefined> {
   try {
     const cfg = loadConfig();
     cachedClient = await connect(cfg.weaviate);
-    lastConnectError = undefined;
     return cachedClient;
-  } catch (err) {
-    lastConnectError = err instanceof Error ? err.message : String(err);
+  } catch {
     return undefined;
   }
 }
@@ -77,61 +55,8 @@ function loadState(): IngestState {
 }
 
 export async function health(): Promise<HealthStatus> {
-  const cfg = loadConfig();
-  const stateFile = resolve(cfg.ingest.stateFile);
-  const state = loadState();
-
-  const result: HealthStatus = {
-    weaviate: { http: false, grpc: false },
-    embedder: { reachable: false },
-    reranker: { reachable: false, enabled: cfg.search.rerankerEnabled },
-    state: {
-      path: stateFile,
-      exists: existsSync(stateFile),
-      projects: Object.keys(state.projects),
-      files: Object.keys(state.files),
-    },
-  };
-
-  // HTTP probe via Weaviate's readiness endpoint — does not need the client.
-  const httpUrl = `http${cfg.weaviate.secure ? 's' : ''}://${cfg.weaviate.host}:${cfg.weaviate.httpPort}/v1/.well-known/ready`;
-  try {
-    const r = await fetch(httpUrl, { signal: AbortSignal.timeout(2000) });
-    result.weaviate.http = r.ok;
-  } catch (err) {
-    result.weaviate.error = err instanceof Error ? err.message : String(err);
-  }
-
-  // gRPC probe via the typed client (which opens both transports).
-  const client = await getClient();
-  if (client) {
-    try {
-      const live = await client.isLive();
-      result.weaviate.grpc = live;
-    } catch (err) {
-      result.weaviate.error = err instanceof Error ? err.message : String(err);
-    }
-
-    // The transformer modules expose /meta on Weaviate's HTTP root — we can
-    // tell whether they're loaded by inspecting the modules block.
-    try {
-      const meta = await fetch(
-        `http${cfg.weaviate.secure ? 's' : ''}://${cfg.weaviate.host}:${cfg.weaviate.httpPort}/v1/meta`,
-        { signal: AbortSignal.timeout(2000) },
-      );
-      if (meta.ok) {
-        const body = (await meta.json()) as { modules?: Record<string, unknown> };
-        result.embedder.reachable = !!body.modules?.['text2vec-transformers'];
-        result.reranker.reachable = !!body.modules?.['reranker-transformers'];
-      }
-    } catch (err) {
-      result.embedder.error = err instanceof Error ? err.message : String(err);
-    }
-  } else if (lastConnectError) {
-    result.weaviate.error = lastConnectError;
-  }
-
-  return result;
+  // Thin re-export so the existing dashboard route signature stays stable.
+  return coreHealth();
 }
 
 export async function projects(): Promise<ProjectSummary[]> {
