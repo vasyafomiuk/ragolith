@@ -35,6 +35,7 @@ import { syncRepo, changedFiles, joinRepo } from '../core/git-manager.js';
 import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
 import { createProgress } from '../core/progress.js';
+import { runMigrations } from '../core/migrations.js';
 import type { ChunkResult, IngestState, ProjectConfig, FileConfig } from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
@@ -322,13 +323,34 @@ async function main(): Promise<void> {
     .option('--full', 'Force a full rebuild (delete + re-ingest all projects)', false)
     .option('--project <name>', 'Restrict to one project name')
     .option('--file <name>', 'Restrict to one standalone file entry')
+    .option('--migrate-only', 'Run schema migrations and exit without ingesting anything', false)
     .parse(process.argv);
 
-  const opts = program.opts<{ full: boolean; project?: string; file?: string }>();
+  const opts = program.opts<{
+    full: boolean;
+    project?: string;
+    file?: string;
+    migrateOnly: boolean;
+  }>();
   const cfg = loadConfig();
 
   const client = await connect(cfg.weaviate);
   await ensureSchema(client, { reranker: cfg.search.rerankerEnabled });
+
+  // Apply any pending schema migrations before we touch user data.
+  const mig = await runMigrations(client);
+  if (mig.applied.length > 0) {
+    process.stderr.write(`[ingest] schema migrated ${mig.fromVersion} → ${mig.toVersion}\n`);
+    for (const m of mig.applied) {
+      process.stderr.write(`[ingest]   v${m.version}: ${m.description}\n`);
+    }
+  }
+
+  if (opts.migrateOnly) {
+    process.stderr.write('[ingest] --migrate-only set, exiting without ingesting\n');
+    await client.close();
+    return;
+  }
 
   const stateFile = resolve(cfg.ingest.stateFile);
   const state = await loadState(stateFile);

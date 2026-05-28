@@ -46,6 +46,9 @@ export interface SchemaOptions {
 /**
  * Idempotently create the three collections. Safe to call on every server/ingest start.
  * If a collection already exists, it is left untouched (no destructive migration).
+ *
+ * For property additions, tokenization changes, etc. against existing schemas,
+ * use `runMigrations` from ./migrations.ts.
  */
 export async function ensureSchema(
   client: WeaviateClient,
