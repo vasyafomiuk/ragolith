@@ -34,6 +34,7 @@ import {
 import { syncRepo, changedFiles, joinRepo } from '../core/git-manager.js';
 import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
+import { createProgress } from '../core/progress.js';
 import type { ChunkResult, IngestState, ProjectConfig, FileConfig } from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
@@ -146,42 +147,56 @@ async function ingestFiles(
   buffers: BatchBuffers,
   maxBytes: number,
   commitSha: string | undefined,
+  label: string,
 ): Promise<{ processed: number; skipped: number }> {
+  const progress = createProgress({ total: fileRoots.length, label, indent: '    ' });
   let processed = 0;
   let skipped = 0;
-  for (const { absPath, storedPath } of fileRoots) {
-    const language = detectLanguage(absPath);
-    if (language === 'unknown') {
-      skipped++;
-      continue;
-    }
-    const result = await readSourceFile(absPath, maxBytes);
-    if (!result) {
-      skipped++;
-      continue;
-    }
-    const chunked = pickChunker({
-      content: result.content,
-      filePath: storedPath,
-      project,
-      language: result.language,
-    });
-    if (commitSha)
-      chunked.chunks.forEach((c) => {
-        c.commit_sha = commitSha;
+  try {
+    for (const { absPath, storedPath } of fileRoots) {
+      const language = detectLanguage(absPath);
+      if (language === 'unknown') {
+        skipped++;
+        progress.tick({ detail: storedPath });
+        continue;
+      }
+      const result = await readSourceFile(absPath, maxBytes);
+      if (!result) {
+        skipped++;
+        progress.tick({ detail: storedPath });
+        continue;
+      }
+      const chunked = pickChunker({
+        content: result.content,
+        filePath: storedPath,
+        project,
+        language: result.language,
       });
-    const prefixed = applyProjectPrefix(chunked, project);
-    buffers.chunks.push(...prefixed.chunks);
-    buffers.symbols.push(...prefixed.symbols);
-    buffers.edges.push(...prefixed.edges);
-    processed++;
-    if (
-      buffers.chunks.length >= BATCH_SIZE ||
-      buffers.symbols.length >= BATCH_SIZE ||
-      buffers.edges.length >= BATCH_SIZE
-    ) {
-      await flushBatches(client, buffers);
+      if (commitSha)
+        chunked.chunks.forEach((c) => {
+          c.commit_sha = commitSha;
+        });
+      const prefixed = applyProjectPrefix(chunked, project);
+      buffers.chunks.push(...prefixed.chunks);
+      buffers.symbols.push(...prefixed.symbols);
+      buffers.edges.push(...prefixed.edges);
+      processed++;
+      progress.tick({
+        chunks: prefixed.chunks.length,
+        symbols: prefixed.symbols.length,
+        edges: prefixed.edges.length,
+        detail: storedPath,
+      });
+      if (
+        buffers.chunks.length >= BATCH_SIZE ||
+        buffers.symbols.length >= BATCH_SIZE ||
+        buffers.edges.length >= BATCH_SIZE
+      ) {
+        await flushBatches(client, buffers);
+      }
     }
+  } finally {
+    progress.done(skipped > 0 ? `${skipped} skipped` : undefined);
   }
   return { processed, skipped };
 }
@@ -222,7 +237,15 @@ async function ingestProject(
       absPath: joinRepo(handle.path, p),
       storedPath: p,
     }));
-    await ingestFiles(client, project.name, fileRoots, buffers, maxBytes, handle.head);
+    await ingestFiles(
+      client,
+      project.name,
+      fileRoots,
+      buffers,
+      maxBytes,
+      handle.head,
+      'incremental',
+    );
   } else {
     if (previous) {
       process.stderr.write('[ingest]   full rebuild (forced or first run)\n');
@@ -238,7 +261,15 @@ async function ingestProject(
         storedPath: relative(handle.path, abs),
       }));
       process.stderr.write(`[ingest]   ${sub || '.'}: ${files.length} files\n`);
-      await ingestFiles(client, project.name, fileRoots, buffers, maxBytes, handle.head);
+      await ingestFiles(
+        client,
+        project.name,
+        fileRoots,
+        buffers,
+        maxBytes,
+        handle.head,
+        sub || '.',
+      );
     }
   }
 
@@ -273,6 +304,7 @@ async function ingestStandalone(
     buffers,
     maxBytes,
     undefined,
+    file.name,
   );
   await flushBatches(client, buffers);
 
