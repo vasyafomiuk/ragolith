@@ -1,30 +1,32 @@
 name: Release
 
-# Publishes ragolith to npm. Two ways to fire it:
+# Publishes ragolith to npm via Trusted Publishing (OIDC).
 #
+# Two ways to fire it:
 #   A) Push a v* tag (the canonical release flow):
 #        git tag v0.1.0 && git push origin v0.1.0
-#
 #   B) Manual run from the Actions tab (GitHub → Actions → Release →
 #      "Run workflow"). Whatever is in package.json's "version" field at
-#      that moment is what gets published. Use this for re-runs after a
-#      transient failure, or for ad-hoc publishes where you don't want
-#      to deal with tags.
+#      that moment is what gets published.
 #
 # Either way the workflow:
 #   1. Runs the full local pipeline (lint + typecheck + coverage + build).
 #   2. npm publish --provenance --access public
-#   3. npm displays the package with a provenance attestation linking the
-#      published tarball back to this exact commit + workflow run.
+#   3. npm exchanges the workflow's OIDC token for a short-lived publish
+#      credential — no NPM_TOKEN secret needed.
+#   4. The published tarball carries a provenance attestation linking it
+#      back to this exact commit + workflow run.
 #
 # Setup (one-time):
-#   - Create an npm "Granular Access Token" with Read+Write on packages and
-#     "Bypass two-factor authentication" enabled, then store it as the
-#     NPM_TOKEN secret in this repo:
-#       gh secret set NPM_TOKEN --repo vasyafomiuk/ragolith
-#   - For provenance to work, the `id-token: write` permission must be granted
-#     to the workflow (already configured below) and the package must be
+#   - On npm: Settings → Trusted Publishers → Add → GitHub Actions, with
+#     package: ragolith, owner: vasyafomiuk, repo: ragolith, workflow:
+#     release.yml. (Pre-configuration is supported — the package doesn't
+#     need to exist yet.)
+#   - In this repo: the `id-token: write` permission must be granted to
+#     the workflow (already configured below) and the package must be
 #     published from a public repo (this one is).
+#
+# No NPM_TOKEN secret is required.
 
 on:
   push:
@@ -70,8 +72,15 @@ jobs:
         if: ${{ inputs.dry_run == true }}
         run: npm pack --dry-run
 
-      - name: Publish to npm
+      # Trusted Publishing requires npm CLI >= 11.5.1. setup-node@v4 with
+      # Node 22 ships a recent npm, but pin upward defensively in case the
+      # runner image lags.
+      - name: Ensure npm is recent enough for Trusted Publishing
         if: ${{ inputs.dry_run != true }}
+        run: npm install --global npm@latest
+
+      - name: Publish to npm (Trusted Publishing via OIDC)
+        if: ${{ inputs.dry_run != true }}
+        # npm CLI exchanges the workflow's OIDC token for a publish
+        # credential. No NODE_AUTH_TOKEN env, no NPM_TOKEN secret.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

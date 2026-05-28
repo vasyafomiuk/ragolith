@@ -7,7 +7,7 @@ All notable changes to this project are recorded here. Format loosely follows [K
 ### Added
 
 - **Published to npm as [`ragolith`](https://www.npmjs.com/package/ragolith)**. `npm install -g ragolith` puts `ragolith-server`, `ragolith-ingest`, `ragolith-backup` on your PATH. Source clone no longer required.
-- **Release workflow** (`.github/workflows/release.yml`) that publishes with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) on `v*` tag push, linking each published tarball back to the exact commit + workflow run.
+- **Release workflow** (`.github/workflows/release.yml`) publishes via **npm Trusted Publishing** (OIDC) on `v*` tag push — no long-lived NPM_TOKEN, no 2FA-bypass tokens, no secrets to leak. Each tarball carries a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) signed by GitHub Actions and verifiable against the exact commit + workflow run.
 - **Layered source layout**: `src/core/`, `src/mcp/`, `src/cli/`. The `core` layer is the public surface (re-exported through `src/core/index.ts`); `mcp` and `cli` are sibling adapters. Boundary enforced by `scripts/check-layers.mjs` + a CI step.
 - **Chunker dispatch** moved into `src/core/chunkers/dispatch.ts` so any future transport can reuse it (not just the ingest CLI).
 - **Unit test suite** (`tests/**/*.test.ts`) using `node:test` — zero new runtime deps. 50 tests covering chunkers, search helpers, config, file-reader, and dispatch.
