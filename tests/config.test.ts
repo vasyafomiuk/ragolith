@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadConfig, resetConfigCache } from '../src/core/config.js';
+import { configFilePath, loadConfig, resetConfigCache } from '../src/core/config.js';
 
 let tmp: string;
 const savedEnv = { ...process.env };
@@ -91,5 +91,21 @@ describe('loadConfig', () => {
     resetConfigCache();
     const third = loadConfig();
     assert.equal(third.weaviate.host, 'changed');
+  });
+});
+
+describe('configFilePath', () => {
+  it('defaults to ragc.config.json in the current working directory', () => {
+    // process.cwd() on macOS resolves /var/... → /private/var/..., so we
+    // assert on the basename + parent rather than the absolute string.
+    const p = configFilePath();
+    assert.equal(p.endsWith('/ragc.config.json'), true, `got ${p}`);
+    assert.equal(p.includes(tmp.replace('/private', '')) || p.includes(tmp), true);
+  });
+
+  it('honours RAGOLITH_CONFIG when set', () => {
+    const alt = join(tmp, 'sub', 'custom.json');
+    process.env['RAGOLITH_CONFIG'] = alt;
+    assert.equal(configFilePath(), alt);
   });
 });

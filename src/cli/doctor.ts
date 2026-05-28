@@ -71,6 +71,16 @@ function printPretty(h: HealthStatus): void {
   w(rerankerOk ? color(C.green, rerankerNote) : color(C.yellow, rerankerNote));
   w('\n');
 
+  const cfgOk = h.config.exists;
+  w(`  ${dot(cfgOk)}  Config file      `);
+  w(
+    cfgOk
+      ? color(C.green, 'ragc.config.json present')
+      : color(C.yellow, 'ragc.config.json missing — run ragolith-init'),
+  );
+  w('\n');
+  w(`     ${color(C.dim, h.config.path)}\n`);
+
   const stateOk = h.state.exists;
   w(`  ${dot(stateOk)}  Ingest state     `);
   if (stateOk) {
@@ -79,7 +89,9 @@ function printPretty(h: HealthStatus): void {
     w(color(C.yellow, 'not yet created — run ragolith-ingest'));
   }
   w('\n');
-  w(`     ${color(C.dim, h.state.path)}\n\n`);
+  // Runtime artifact, not user-editable — call it out so it isn't mistaken
+  // for ragc.config.json.
+  w(`     ${color(C.dim, h.state.path + '  (runtime artifact)')}\n\n`);
 }
 
 function isFatal(h: HealthStatus): boolean {

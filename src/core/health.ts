@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadConfig } from './config.js';
+import { configFilePath, loadConfig } from './config.js';
 import { connect } from './weaviate-client.js';
 import type { IngestState } from './types.js';
 
@@ -25,6 +25,20 @@ export interface HealthStatus {
     reachable: boolean;
     enabled: boolean;
   };
+  /**
+   * Path + existence of `ragc.config.json` (the user-edited settings file).
+   * Distinct from `state` below — config is declarative ("what to index"),
+   * state is runtime ("what HAS been indexed").
+   */
+  config: {
+    path: string;
+    exists: boolean;
+  };
+  /**
+   * Path + existence of `.ragolith/data.json` (or whatever
+   * `ingest.stateFile` points to). Created by `ragolith-ingest`; the project
+   * + file names below come from its contents when it exists.
+   */
   state: {
     path: string;
     exists: boolean;
@@ -47,12 +61,17 @@ function loadState(): IngestState {
 export async function health(): Promise<HealthStatus> {
   const cfg = loadConfig();
   const stateFile = resolve(cfg.ingest.stateFile);
+  const cfgFile = configFilePath();
   const state = loadState();
 
   const result: HealthStatus = {
     weaviate: { http: false, grpc: false },
     embedder: { reachable: false },
     reranker: { reachable: false, enabled: cfg.search.rerankerEnabled },
+    config: {
+      path: cfgFile,
+      exists: existsSync(cfgFile),
+    },
     state: {
       path: stateFile,
       exists: existsSync(stateFile),

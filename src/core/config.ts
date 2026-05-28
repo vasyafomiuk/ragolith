@@ -98,13 +98,25 @@ function applyEnvOverrides(cfg: RagolithConfig): RagolithConfig {
   return next;
 }
 
+/**
+ * Resolve the on-disk path of the config file. Honours `RAGOLITH_CONFIG`
+ * (absolute path expected), otherwise falls back to `ragc.config.json` in the
+ * current working directory.
+ *
+ * Returns the path the file *would* live at — not whether it exists. Callers
+ * who care about existence should `existsSync(configFilePath())`.
+ */
+export function configFilePath(): string {
+  return process.env['RAGOLITH_CONFIG']
+    ? resolve(process.env['RAGOLITH_CONFIG'])
+    : resolve(process.cwd(), 'ragc.config.json');
+}
+
 let cached: RagolithConfig | undefined;
 
 export function loadConfig(): RagolithConfig {
   if (cached) return cached;
-  const path = process.env['RAGOLITH_CONFIG']
-    ? resolve(process.env['RAGOLITH_CONFIG'])
-    : resolve(process.cwd(), 'ragc.config.json');
+  const path = configFilePath();
   const fromFile = readJsonIfExists(path);
   const merged = deepMerge(DEFAULTS, fromFile);
   cached = applyEnvOverrides(merged);

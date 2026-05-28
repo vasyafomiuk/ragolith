@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { WeaviateClient } from 'weaviate-client';
-import { loadConfig, resetConfigCache } from '../core/config.js';
+import { configFilePath, loadConfig, resetConfigCache } from '../core/config.js';
 import { connect, CODE_CHUNK } from '../core/weaviate-client.js';
 import { search } from '../core/search.js';
 import { health as coreHealth, type HealthStatus } from '../core/health.js';
@@ -270,13 +270,9 @@ export function listSnapshots(): SnapshotRecord[] {
 
 // --- config read/write ----------------------------------------------------
 
-function configPath(): string {
-  return resolve(process.env['RAGOLITH_CONFIG'] ?? resolve(process.cwd(), 'ragc.config.json'));
-}
-
 /** Read the current config from disk and return it raw (with defaults filled in). */
 export function readConfig(): { path: string; exists: boolean; config: RagolithConfig } {
-  const path = configPath();
+  const path = configFilePath();
   const exists = existsSync(path);
   // loadConfig() merges file + env + defaults — exactly what the rest of the
   // app uses, so the dashboard sees the same view.
@@ -311,7 +307,7 @@ export async function writeConfig(next: unknown): Promise<{ path: string }> {
     }
   }
 
-  const path = configPath();
+  const path = configFilePath();
   const dir = dirname(path);
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
 

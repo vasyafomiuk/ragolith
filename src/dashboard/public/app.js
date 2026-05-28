@@ -401,12 +401,19 @@ async function renderHealth() {
             : 'disabled in config',
       ),
       card(
+        'Config file',
+        h.config?.exists ?? false,
+        h.config?.exists ? 'ragc.config.json present' : 'ragc.config.json missing',
+        h.config?.path ?? '',
+      ),
+      card(
         'Ingest state',
         h.state.exists,
         h.state.exists
           ? `${h.state.projects.length} projects, ${h.state.files.length} files`
-          : 'not yet created',
-        h.state.path,
+          : 'not yet created — run ragolith-ingest',
+        // Make it explicit this is the runtime artifact, not the config file.
+        h.state.path + '  ·  runtime artifact, written by ragolith-ingest',
       ),
     ].join('');
     dump.textContent = JSON.stringify(h, null, 2);
