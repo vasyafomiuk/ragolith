@@ -174,12 +174,13 @@ export async function runSearch(req: SearchRequest): Promise<SearchHit[]> {
 
   return search(client, {
     query: req.query,
-    limit: req.limit ?? 20,
+    limit: req.limit ?? cfg.search.limit ?? 20,
     ...(req.project ? { project: req.project } : {}),
     ...(req.language ? { language: req.language } : {}),
     overFetch: cfg.search.overFetch,
     diversityPerFile: cfg.search.diversityPerFile,
     rerankerEnabled: cfg.search.rerankerEnabled,
+    ...(cfg.search.maxContentChars ? { maxContentChars: cfg.search.maxContentChars } : {}),
   });
 }
 
@@ -199,11 +200,12 @@ export async function runSdlcSearch(req: SdlcSearchRequest): Promise<ArtifactHit
   if (!client) return [];
   return searchArtifacts(client, {
     query: req.query,
-    limit: req.limit ?? 20,
+    limit: req.limit ?? cfg.search.limit ?? 20,
     ...(req.project ? { project: req.project } : {}),
     ...(req.source ? { source: req.source } : {}),
     ...(req.kind ? { kind: req.kind } : {}),
     rerankerEnabled: cfg.search.rerankerEnabled,
+    ...(cfg.search.maxContentChars ? { maxContentChars: cfg.search.maxContentChars } : {}),
   });
 }
 

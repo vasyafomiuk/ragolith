@@ -279,10 +279,29 @@ export interface IngestConfig {
   maxFileBytes: number;
 }
 
+/**
+ * Named search-effort presets. They trade result quality/recall against the
+ * token footprint of what gets returned (and fed to a downstream LLM):
+ *   - productivity: widest net, rerank on, more + longer results
+ *   - balanced:     sensible middle (the default)
+ *   - frugal:       fewest + shortest results, rerank off — minimum tokens
+ * `custom` means the knobs were hand-tuned away from any preset.
+ */
+export type SearchProfile = 'productivity' | 'balanced' | 'frugal' | 'custom';
+
 export interface SearchConfig {
   overFetch: number;
   diversityPerFile: number;
   rerankerEnabled: boolean;
+  /** Default number of hits to return when a request doesn't specify one. */
+  limit?: number;
+  /**
+   * Max characters of returned chunk/excerpt content. The main token lever for
+   * what an LLM client ingests. 0 / undefined = no truncation.
+   */
+  maxContentChars?: number;
+  /** Which effort preset is active (UI hint; `custom` when hand-tuned). */
+  profile?: SearchProfile;
 }
 
 export interface BackupConfig {

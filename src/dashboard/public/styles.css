@@ -884,3 +884,124 @@ details.raw summary:hover {
 .err-text {
   color: var(--bad);
 }
+
+/* ---------- Search effort presets + sliders ---------- */
+
+.effort-presets {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 18px;
+  flex-wrap: wrap;
+}
+.effort-btn {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.effort-btn:hover {
+  border-color: var(--accent);
+}
+.effort-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.effort-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.effort-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 70px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.slider-row label {
+  color: var(--text-dim);
+}
+.slider-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.slider-row output {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  color: var(--text);
+}
+#cfg-search-estimate {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+}
+
+/* ---------- Service composition graph ---------- */
+
+.svc-graph {
+  margin: 12px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.svc-graph svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.svc-edge {
+  stroke: var(--border-strong);
+  opacity: 0.55;
+}
+.svc-node circle {
+  cursor: default;
+}
+.svc-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  fill: var(--text-dim);
+  text-anchor: middle;
+  pointer-events: none;
+}
+.svc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.svc-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.svc-legend .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.svc-legend .ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 2px solid var(--accent);
+}

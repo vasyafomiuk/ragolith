@@ -572,6 +572,7 @@ $('analysis-run-dec').addEventListener('click', async () => {
         : '';
     out.innerHTML =
       `<p class="muted small">${r.totals.modules} modules · ${r.totals.crossModuleCalls} cross-module calls · ${r.seams.length} seam(s)</p>` +
+      buildServiceGraph(r) +
       '<table class="analysis-table"><thead><tr><th>module</th><th class="num">files</th><th class="num">cohesion</th><th class="num">instability</th><th class="num">fanIn</th><th class="num">fanOut</th></tr></thead><tbody>' +
       moduleRows +
       '</tbody></table>' +
@@ -581,6 +582,129 @@ $('analysis-run-dec').addEventListener('click', async () => {
     out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
   }
 });
+
+// ----- service composition graph -------------------------------------------
+//
+// A dependency-light, deterministic force-directed SVG of the module graph:
+// nodes = modules (radius ∝ file count, fill ∝ cohesion, ring = seam), edges =
+// cross-module couplings (width ∝ call volume). Layout is a fixed-iteration
+// spring simulation seeded on a circle, so it's stable across renders without
+// any animation loop or library.
+
+function cohesionColor(c) {
+  if (c >= 0.66) return 'var(--ok)';
+  if (c >= 0.33) return 'var(--warn)';
+  return 'var(--bad)';
+}
+
+function buildServiceGraph(report) {
+  const W = 640;
+  const H = 440;
+  const pad = 44;
+  const nodes = report.modules.map((m) => ({ ...m, x: 0, y: 0, vx: 0, vy: 0 }));
+  if (nodes.length < 2) {
+    return '<p class="muted small">Graph needs at least 2 modules with call edges.</p>';
+  }
+  const idx = new Map(nodes.map((n, i) => [n.module, i]));
+  const edges = report.couplings
+    .map((c) => ({ s: idx.get(c.a), t: idx.get(c.b), w: c.calls }))
+    .filter((e) => e.s !== undefined && e.t !== undefined);
+
+  const cx = W / 2;
+  const cy = H / 2;
+  const R = Math.min(W, H) / 2 - pad;
+  nodes.forEach((n, i) => {
+    const a = (2 * Math.PI * i) / nodes.length;
+    n.x = cx + R * Math.cos(a);
+    n.y = cy + R * Math.sin(a);
+  });
+
+  // Fixed-iteration spring layout (deterministic; circle seed, no RNG).
+  for (let it = 0; it < 320; it++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        let dx = nodes[i].x - nodes[j].x;
+        let dy = nodes[i].y - nodes[j].y;
+        const d2 = dx * dx + dy * dy || 0.01;
+        const d = Math.sqrt(d2);
+        const rep = 2400 / d2;
+        dx = (dx / d) * rep;
+        dy = (dy / d) * rep;
+        nodes[i].vx += dx;
+        nodes[i].vy += dy;
+        nodes[j].vx -= dx;
+        nodes[j].vy -= dy;
+      }
+    }
+    for (const e of edges) {
+      const a = nodes[e.s];
+      const b = nodes[e.t];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const k = 0.02 * Math.min(4, e.w);
+      a.vx += dx * k;
+      a.vy += dy * k;
+      b.vx -= dx * k;
+      b.vy -= dy * k;
+    }
+    for (const n of nodes) {
+      n.vx += (cx - n.x) * 0.006;
+      n.vy += (cy - n.y) * 0.006;
+      n.x += n.vx * 0.85;
+      n.y += n.vy * 0.85;
+      n.vx *= 0.82;
+      n.vy *= 0.82;
+      n.x = Math.max(pad, Math.min(W - pad, n.x));
+      n.y = Math.max(pad, Math.min(H - pad, n.y));
+    }
+  }
+
+  const seamSet = new Set(report.seams.map((s) => s.module));
+  const radius = (m) => 7 + Math.min(16, Math.sqrt(m.files || 1) * 2.4);
+
+  const edgeSvg = edges
+    .map((e) => {
+      const a = nodes[e.s];
+      const b = nodes[e.t];
+      const sw = 1 + Math.min(5, Math.log2(e.w + 1));
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke-width="${sw.toFixed(2)}" class="svc-edge"><title>${escape(a.module)} ↔ ${escape(b.module)}: ${e.w} calls</title></line>`;
+    })
+    .join('');
+
+  const nodeSvg = nodes
+    .map((n) => {
+      const r = radius(n);
+      const ring = seamSet.has(n.module)
+        ? ` stroke="var(--accent)" stroke-width="2.5"`
+        : ' stroke="#fff" stroke-width="1.5"';
+      const label = n.module.length > 16 ? n.module.slice(0, 15) + '…' : n.module;
+      return (
+        `<g class="svc-node">` +
+        `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${cohesionColor(n.cohesion)}"${ring}>` +
+        `<title>${escape(n.module)} — ${n.files} files, cohesion ${n.cohesion.toFixed(2)}, instability ${n.instability.toFixed(2)}${seamSet.has(n.module) ? ' · suggested seam' : ''}</title></circle>` +
+        `<text x="${n.x.toFixed(1)}" y="${(n.y + r + 11).toFixed(1)}" class="svc-label">${escape(label)}</text>` +
+        `</g>`
+      );
+    })
+    .join('');
+
+  const legend =
+    '<div class="svc-legend">' +
+    '<span><i class="dot" style="background:var(--ok)"></i>cohesive</span>' +
+    '<span><i class="dot" style="background:var(--warn)"></i>mixed</span>' +
+    '<span><i class="dot" style="background:var(--bad)"></i>coupling-heavy</span>' +
+    '<span><i class="ring"></i>suggested seam</span>' +
+    '<span class="muted">node size = files · edge width = call volume</span>' +
+    '</div>';
+
+  return (
+    `<div class="svc-graph"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="service composition graph">` +
+    edgeSvg +
+    nodeSvg +
+    '</svg></div>' +
+    legend
+  );
+}
 
 // ----- health view ----------------------------------------------------------
 
@@ -1189,17 +1313,127 @@ $('backup-refresh').addEventListener('click', () => {
   void loadSnapshotList();
 });
 
+// Effort presets — must mirror SEARCH_PROFILES in src/core/search.ts.
+const EFFORT_PRESETS = {
+  productivity: {
+    overFetch: 3,
+    diversityPerFile: 4,
+    rerankerEnabled: true,
+    limit: 20,
+    maxContentChars: 4000,
+  },
+  balanced: {
+    overFetch: 2,
+    diversityPerFile: 3,
+    rerankerEnabled: true,
+    limit: 10,
+    maxContentChars: 1200,
+  },
+  frugal: {
+    overFetch: 1,
+    diversityPerFile: 2,
+    rerankerEnabled: false,
+    limit: 5,
+    maxContentChars: 400,
+  },
+};
+
 function fillForm(cfg) {
   $('cfg-weaviate-host').value = cfg.weaviate?.host ?? 'localhost';
   $('cfg-weaviate-http').value = cfg.weaviate?.httpPort ?? 8080;
   $('cfg-weaviate-grpc').value = cfg.weaviate?.grpcPort ?? 50051;
   $('cfg-weaviate-secure').checked = !!cfg.weaviate?.secure;
-  $('cfg-search-reranker').checked = cfg.search?.rerankerEnabled !== false;
+
+  const s = cfg.search ?? {};
+  $('cfg-search-reranker').checked = s.rerankerEnabled !== false;
+  $('cfg-search-limit').value = s.limit ?? 10;
+  $('cfg-search-maxchars').value = s.maxContentChars ?? 1200;
+  $('cfg-search-overfetch').value = s.overFetch ?? 2;
+  $('cfg-search-diversity').value = s.diversityPerFile ?? 3;
+  syncEffortUI(s.profile);
+
   // Accept legacy keys so an existing ragc.config.json renders correctly
   // until the user saves (which writes the canonical names back).
   renderProjectsList(cfg.repos ?? cfg.projects ?? []);
   renderFilesList(cfg.documents ?? cfg.files ?? []);
 }
+
+/** Current slider values as a settings object. */
+function readEffortSliders() {
+  return {
+    limit: Number($('cfg-search-limit').value),
+    maxContentChars: Number($('cfg-search-maxchars').value),
+    overFetch: Number($('cfg-search-overfetch').value),
+    diversityPerFile: Number($('cfg-search-diversity').value),
+    rerankerEnabled: $('cfg-search-reranker').checked,
+  };
+}
+
+/** Which preset (if any) the current slider values exactly match. */
+function detectEffortProfile() {
+  const cur = readEffortSliders();
+  for (const [name, p] of Object.entries(EFFORT_PRESETS)) {
+    if (
+      p.limit === cur.limit &&
+      p.maxContentChars === cur.maxContentChars &&
+      p.overFetch === cur.overFetch &&
+      p.diversityPerFile === cur.diversityPerFile &&
+      p.rerankerEnabled === cur.rerankerEnabled
+    ) {
+      return name;
+    }
+  }
+  return 'custom';
+}
+
+/** Refresh slider value labels, the token estimate, and the active preset button. */
+function syncEffortUI(forceProfile) {
+  const cur = readEffortSliders();
+  $('cfg-search-limit-val').textContent = String(cur.limit);
+  $('cfg-search-maxchars-val').textContent =
+    cur.maxContentChars === 0 ? 'unlimited' : String(cur.maxContentChars);
+  $('cfg-search-overfetch-val').textContent = '×' + cur.overFetch;
+  $('cfg-search-diversity-val').textContent = String(cur.diversityPerFile);
+
+  const profile = forceProfile && forceProfile !== 'custom' ? forceProfile : detectEffortProfile();
+  document.querySelectorAll('.effort-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.effort === profile);
+  });
+
+  // Rough upper-bound token estimate for a full result set: chars/4 heuristic.
+  const perHit = cur.maxContentChars > 0 ? cur.maxContentChars : 4000;
+  const approxTokens = Math.round((cur.limit * perHit) / 4);
+  const rerank = cur.rerankerEnabled ? 'reranker on' : 'reranker off';
+  $('cfg-search-estimate').textContent =
+    `≈ up to ${approxTokens.toLocaleString()} tokens per search fed to the LLM · ${rerank}` +
+    (profile === 'custom' ? ' · custom profile' : ` · ${profile} preset`);
+}
+
+function applyEffortPreset(name) {
+  const p = EFFORT_PRESETS[name];
+  if (!p) return;
+  $('cfg-search-limit').value = p.limit;
+  $('cfg-search-maxchars').value = p.maxContentChars;
+  $('cfg-search-overfetch').value = p.overFetch;
+  $('cfg-search-diversity').value = p.diversityPerFile;
+  $('cfg-search-reranker').checked = p.rerankerEnabled;
+  syncEffortUI(name);
+}
+
+// Wire preset buttons + live slider updates (once, at load).
+document.querySelectorAll('.effort-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyEffortPreset(btn.dataset.effort));
+});
+for (const id of [
+  'cfg-search-limit',
+  'cfg-search-maxchars',
+  'cfg-search-overfetch',
+  'cfg-search-diversity',
+]) {
+  const el = $(id);
+  if (el) el.addEventListener('input', () => syncEffortUI());
+}
+$('cfg-search-reranker').addEventListener('change', () => syncEffortUI());
 
 function renderProjectsList(items) {
   const list = $('cfg-projects-list');
@@ -1264,8 +1498,14 @@ function collectFormToConfig() {
   base.weaviate.httpPort = Number($('cfg-weaviate-http').value) || 8080;
   base.weaviate.grpcPort = Number($('cfg-weaviate-grpc').value) || 50051;
   base.weaviate.secure = $('cfg-weaviate-secure').checked;
-  base.search = base.search || { overFetch: 2, diversityPerFile: 3 };
-  base.search.rerankerEnabled = $('cfg-search-reranker').checked;
+  base.search = base.search || {};
+  const eff = readEffortSliders();
+  base.search.overFetch = eff.overFetch;
+  base.search.diversityPerFile = eff.diversityPerFile;
+  base.search.rerankerEnabled = eff.rerankerEnabled;
+  base.search.limit = eff.limit;
+  base.search.maxContentChars = eff.maxContentChars;
+  base.search.profile = detectEffortProfile();
 
   // Drop any legacy keys from `base` so the saved file ends up canonical.
   delete base.projects;

@@ -3,7 +3,14 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { classifyAlpha, expandQuery, autocut, diversityFilter } from '../src/core/search.js';
+import {
+  classifyAlpha,
+  expandQuery,
+  autocut,
+  diversityFilter,
+  truncateContent,
+  SEARCH_PROFILES,
+} from '../src/core/search.js';
 
 describe('classifyAlpha', () => {
   it('treats an identifier as keyword-heavy (low alpha)', () => {
@@ -85,5 +92,34 @@ describe('diversityFilter', () => {
       out.map((h) => h.tag),
       [1, 2, 3],
     );
+  });
+});
+
+describe('truncateContent', () => {
+  it('leaves short text unchanged', () => {
+    assert.equal(truncateContent('hello', 100), 'hello');
+  });
+  it('truncates and adds an ellipsis past the limit', () => {
+    assert.equal(truncateContent('abcdef', 3), 'abc…');
+  });
+  it('treats 0 / undefined as unlimited', () => {
+    assert.equal(truncateContent('abcdef', 0), 'abcdef');
+    assert.equal(truncateContent('abcdef', undefined), 'abcdef');
+  });
+});
+
+describe('SEARCH_PROFILES', () => {
+  it('orders effort by token footprint: productivity > balanced > frugal', () => {
+    const p = SEARCH_PROFILES.productivity;
+    const b = SEARCH_PROFILES.balanced;
+    const f = SEARCH_PROFILES.frugal;
+    assert.ok(p.limit > b.limit && b.limit > f.limit);
+    assert.ok(p.maxContentChars > b.maxContentChars && b.maxContentChars > f.maxContentChars);
+    assert.ok(p.overFetch >= b.overFetch && b.overFetch >= f.overFetch);
+  });
+  it('only frugal disables the reranker', () => {
+    assert.equal(SEARCH_PROFILES.productivity.rerankerEnabled, true);
+    assert.equal(SEARCH_PROFILES.balanced.rerankerEnabled, true);
+    assert.equal(SEARCH_PROFILES.frugal.rerankerEnabled, false);
   });
 });

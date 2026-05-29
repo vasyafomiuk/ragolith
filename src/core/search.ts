@@ -8,7 +8,54 @@
 
 import { Filters, type WeaviateClient } from 'weaviate-client';
 import { CODE_CHUNK, SDLC_ARTIFACT } from './weaviate-client.js';
-import type { ArtifactHit, Language, SdlcArtifactKind, SearchHit } from './types.js';
+import type { ArtifactHit, Language, SdlcArtifactKind, SearchHit, SearchProfile } from './types.js';
+
+// --- effort presets ---------------------------------------------------------
+
+export interface SearchProfileSettings {
+  overFetch: number;
+  diversityPerFile: number;
+  rerankerEnabled: boolean;
+  limit: number;
+  maxContentChars: number;
+}
+
+/**
+ * The three named effort presets. Higher effort = better recall/quality and a
+ * larger token footprint; lower effort = fewer, shorter results for minimum
+ * token consumption downstream. The dashboard's preset buttons write these
+ * values into `ragc.config.json`'s `search` block, which both the MCP server
+ * and the dashboard read.
+ */
+export const SEARCH_PROFILES: Record<Exclude<SearchProfile, 'custom'>, SearchProfileSettings> = {
+  productivity: {
+    overFetch: 3,
+    diversityPerFile: 4,
+    rerankerEnabled: true,
+    limit: 20,
+    maxContentChars: 4000,
+  },
+  balanced: {
+    overFetch: 2,
+    diversityPerFile: 3,
+    rerankerEnabled: true,
+    limit: 10,
+    maxContentChars: 1200,
+  },
+  frugal: {
+    overFetch: 1,
+    diversityPerFile: 2,
+    rerankerEnabled: false,
+    limit: 5,
+    maxContentChars: 400,
+  },
+};
+
+/** Truncate text to `max` chars (adding an ellipsis), or return it unchanged. */
+export function truncateContent(text: string, max: number | undefined): string {
+  if (!max || max <= 0 || text.length <= max) return text;
+  return text.slice(0, max) + '…';
+}
 
 export interface SearchOptions {
   query: string;
@@ -19,6 +66,8 @@ export interface SearchOptions {
   overFetch: number;
   diversityPerFile: number;
   rerankerEnabled: boolean;
+  /** Truncate each hit's content to this many chars (token lever). */
+  maxContentChars?: number;
 }
 
 // --- 1. classify ---
@@ -172,7 +221,13 @@ export async function search(client: WeaviateClient, opts: SearchOptions): Promi
 
   // Stage 6 — diversity filter then final limit.
   const diverse = diversityFilter(trimmed, opts.diversityPerFile);
-  return diverse.slice(0, limit);
+  const limited = diverse.slice(0, limit);
+
+  // Stage 7 — optional content truncation to cap token footprint.
+  if (opts.maxContentChars && opts.maxContentChars > 0) {
+    for (const h of limited) h.content = truncateContent(h.content, opts.maxContentChars);
+  }
+  return limited;
 }
 
 // --- SDLC artifact search ---------------------------------------------------
@@ -184,6 +239,8 @@ export interface ArtifactSearchOptions {
   source?: string;
   kind?: SdlcArtifactKind;
   rerankerEnabled: boolean;
+  /** Max chars of artifact body returned per hit. Defaults to 500. */
+  maxContentChars?: number;
 }
 
 /**
@@ -235,11 +292,13 @@ export async function searchArtifacts(
     const p = o.properties as Record<string, unknown>;
     const meta = o.metadata as { score?: number; rerankScore?: number } | undefined;
     const body = (p['raw_body'] as string) ?? '';
+    const excerptMax =
+      opts.maxContentChars && opts.maxContentChars > 0 ? opts.maxContentChars : 500;
     const hit: ArtifactHit = {
       artifact_id: (p['artifact_id'] as string) ?? '',
       kind: ((p['kind'] as string) || 'other') as SdlcArtifactKind,
       title: (p['title'] as string) ?? '',
-      excerpt: body.length > 500 ? body.slice(0, 500) + '…' : body,
+      excerpt: truncateContent(body, excerptMax),
       source: (p['source'] as string) ?? '',
       project: (p['project'] as string) ?? '',
       score: meta?.rerankScore ?? meta?.score ?? 0,

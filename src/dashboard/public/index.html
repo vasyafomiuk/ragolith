@@ -469,11 +469,51 @@
             </div>
 
             <div class="card section">
-              <h2 class="section-h">Search</h2>
+              <h2 class="section-h">Search effort</h2>
+              <p class="muted small">
+                Trade result quality against token consumption. Presets set the knobs below; tune
+                any slider for a custom profile. Applies to dashboard search and the MCP server.
+              </p>
+              <div class="effort-presets" role="group" aria-label="Search effort preset">
+                <button type="button" class="effort-btn" data-effort="productivity">
+                  <span class="effort-title">Max productivity</span>
+                  <span class="effort-sub">widest net · best recall</span>
+                </button>
+                <button type="button" class="effort-btn" data-effort="balanced">
+                  <span class="effort-title">Balanced</span>
+                  <span class="effort-sub">sensible default</span>
+                </button>
+                <button type="button" class="effort-btn" data-effort="frugal">
+                  <span class="effort-title">Minimum tokens</span>
+                  <span class="effort-sub">fewest · shortest</span>
+                </button>
+              </div>
+
+              <div class="slider-row">
+                <label for="cfg-search-limit">Results returned</label>
+                <input type="range" id="cfg-search-limit" min="1" max="50" step="1" />
+                <output id="cfg-search-limit-val"></output>
+              </div>
+              <div class="slider-row">
+                <label for="cfg-search-maxchars">Max content chars / hit</label>
+                <input type="range" id="cfg-search-maxchars" min="0" max="6000" step="100" />
+                <output id="cfg-search-maxchars-val"></output>
+              </div>
+              <div class="slider-row">
+                <label for="cfg-search-overfetch">Over-fetch ×</label>
+                <input type="range" id="cfg-search-overfetch" min="1" max="5" step="1" />
+                <output id="cfg-search-overfetch-val"></output>
+              </div>
+              <div class="slider-row">
+                <label for="cfg-search-diversity">Max hits / file</label>
+                <input type="range" id="cfg-search-diversity" min="1" max="10" step="1" />
+                <output id="cfg-search-diversity-val"></output>
+              </div>
               <label class="checkbox">
                 <input type="checkbox" id="cfg-search-reranker" />
-                <span>Enable cross-encoder reranker (stage 4 of the search pipeline)</span>
+                <span>Cross-encoder reranker (better relevance; more local compute)</span>
               </label>
+              <p class="muted small" id="cfg-search-estimate"></p>
             </div>
 
             <div class="card section">

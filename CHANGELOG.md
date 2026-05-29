@@ -6,6 +6,9 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Search effort presets** — tune the quality/token-consumption tradeoff from the dashboard Config view. Three one-click presets (**Max productivity** / **Balanced** / **Minimum tokens**) drive sliders for result count, max content chars per hit (the main token lever — truncates what an LLM ingests), over-fetch ×, and max hits/file, plus a reranker toggle. A live estimate shows approximate tokens per search. Nudging any slider switches to a "custom" profile. Persisted to `ragc.config.json`'s `search` block, so both the dashboard and the MCP server honor it. New `SEARCH_PROFILES` + `truncateContent` in core; `SearchConfig` gains `limit`, `maxContentChars`, `profile`.
+- **Service composition graph** — the dashboard's Analysis → Decomposition output now renders a force-directed SVG of the module dependency graph: nodes sized by file count and colored by cohesion (green = cohesive, amber = mixed, red = coupling-heavy), edges weighted by call volume, suggested seams ringed. Deterministic layout, vanilla SVG, no dependencies — reuses the existing decomposition data.
+
 - **SDLC knowledge platform** — ragolith now indexes the whole software-development lifecycle, not just code. New capabilities:
 
   - **RSIF (Ragolith SDLC Interchange Format)** — a tool-agnostic format for SDLC artifacts (requirements, decisions/ADRs, tickets, tests, runbooks, API specs, …). Two encodings: Markdown + YAML frontmatter and NDJSON/JSON. ragolith never calls vendor APIs — any tool exports to RSIF and ragolith indexes it (`core/sdlc.ts`). Configure sources in the new `sdlc` config section.

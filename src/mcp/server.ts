@@ -31,6 +31,17 @@ import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
 
 const cfg = loadConfig();
 
+// Shared search knobs from the active effort profile in config. Tuning the
+// profile in the dashboard (or editing ragc.config.json) changes how much the
+// LLM client ingests per query — maxContentChars is the main token lever.
+const SEARCH_KNOBS = {
+  overFetch: cfg.search.overFetch,
+  diversityPerFile: cfg.search.diversityPerFile,
+  rerankerEnabled: cfg.search.rerankerEnabled,
+  ...(cfg.search.maxContentChars ? { maxContentChars: cfg.search.maxContentChars } : {}),
+};
+const DEFAULT_LIMIT = cfg.search.limit ?? 10;
+
 function jsonResult(value: unknown): { content: { type: 'text'; text: string }[] } {
   return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] };
 }
@@ -59,12 +70,10 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ query, limit, project, language }) => {
       const hits = await search(client, {
         query,
-        limit: limit ?? 10,
+        limit: limit ?? DEFAULT_LIMIT,
         ...(project ? { project } : {}),
         ...(language ? { language: language as Language } : {}),
-        overFetch: cfg.search.overFetch,
-        diversityPerFile: cfg.search.diversityPerFile,
-        rerankerEnabled: cfg.search.rerankerEnabled,
+        ...SEARCH_KNOBS,
       });
       return jsonResult(hits);
     },
@@ -76,16 +85,15 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     'Search restricted to code chunks (excludes PDF, DOCX, Markdown).',
     searchOptsSchema,
     async ({ query, limit, project }) => {
+      const want = limit ?? DEFAULT_LIMIT;
       const hits = await search(client, {
         query,
-        limit: (limit ?? 10) * 2,
+        limit: want * 2,
         ...(project ? { project } : {}),
-        overFetch: cfg.search.overFetch,
-        diversityPerFile: cfg.search.diversityPerFile,
-        rerankerEnabled: cfg.search.rerankerEnabled,
+        ...SEARCH_KNOBS,
       });
       const docLangs = new Set<Language>(['pdf', 'docx', 'markdown']);
-      const filtered = hits.filter((h) => !docLangs.has(h.language)).slice(0, limit ?? 10);
+      const filtered = hits.filter((h) => !docLangs.has(h.language)).slice(0, want);
       return jsonResult(filtered);
     },
   );
@@ -96,16 +104,15 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     'Search restricted to documentation (Markdown, PDF, DOCX).',
     searchOptsSchema,
     async ({ query, limit, project }) => {
+      const want = limit ?? DEFAULT_LIMIT;
       const hits = await search(client, {
         query,
-        limit: (limit ?? 10) * 2,
+        limit: want * 2,
         ...(project ? { project } : {}),
-        overFetch: cfg.search.overFetch,
-        diversityPerFile: cfg.search.diversityPerFile,
-        rerankerEnabled: cfg.search.rerankerEnabled,
+        ...SEARCH_KNOBS,
       });
       const docLangs = new Set<Language>(['pdf', 'docx', 'markdown']);
-      const filtered = hits.filter((h) => docLangs.has(h.language)).slice(0, limit ?? 10);
+      const filtered = hits.filter((h) => docLangs.has(h.language)).slice(0, want);
       return jsonResult(filtered);
     },
   );
@@ -342,11 +349,12 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ query, limit, project, source, kind }) => {
       const hits = await searchArtifacts(client, {
         query,
-        limit: limit ?? 10,
+        limit: limit ?? DEFAULT_LIMIT,
         ...(project ? { project } : {}),
         ...(source ? { source } : {}),
         ...(kind ? { kind: kind as SdlcArtifactKind } : {}),
         rerankerEnabled: cfg.search.rerankerEnabled,
+        ...(cfg.search.maxContentChars ? { maxContentChars: cfg.search.maxContentChars } : {}),
       });
       return jsonResult(hits);
     },
