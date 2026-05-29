@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 17 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 23 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -14,6 +14,7 @@ import { loadConfig } from '../core/config.js';
 import {
   connect,
   ensureSchema,
+  fetchCallEdges,
   fetchDecompositionInputs,
   getArtifact,
   getTechStack,
@@ -27,7 +28,10 @@ import { search, searchArtifacts } from '../core/search.js';
 import { analyzeGaps } from '../core/analysis/gaps.js';
 import { analyzeModernization } from '../core/analysis/modernization.js';
 import { decomposeProject } from '../core/analysis/decomposition.js';
-import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
+import { traceFlow } from '../core/analysis/callgraph.js';
+import { buildProjectStructure } from '../core/structure.js';
+import { matchesWildcard, toPathPattern } from '../core/glob.js';
+import type { IngestState, Language, SdlcArtifactKind, SearchHit } from '../core/types.js';
 
 const cfg = loadConfig();
 
@@ -120,7 +124,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
   // 4. find_symbol — exact / prefix symbol lookup.
   server.tool(
     'find_symbol',
-    'Look up function / class / method declarations by name. Supports exact match and prefix.',
+    'Look up function / class / method declarations by name. Supports exact match and prefix; falls back to semantic code search (returning related symbols) when there is no exact/prefix match.',
     {
       name: z.string().describe('Symbol name to find (case-sensitive)'),
       prefix: z.boolean().optional().describe('Match by prefix instead of exact (default false)'),
@@ -141,7 +145,30 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
       ].filter((c): c is NonNullable<typeof c> => c !== undefined);
       const combined = extra.length === 0 ? nameClause : Filters.and(nameClause, ...extra);
       const res = await col.query.fetchObjects({ filters: combined, limit: limit ?? 50 });
-      return jsonResult(res.objects.map((o) => o.properties));
+      if (res.objects.length > 0) return jsonResult(res.objects.map((o) => o.properties));
+      // Semantic fallback — no exact/prefix declaration on file. Search the
+      // code index for the term and surface the symbols of the best hits, so a
+      // fuzzy or misspelled name still leads somewhere.
+      const hits = await search(client, {
+        query: name,
+        limit: limit ?? 10,
+        ...(project ? { project } : {}),
+        ...SEARCH_KNOBS,
+      });
+      const fallback = hits
+        .filter((h) => h.symbol)
+        .map((h) => ({
+          name: h.symbol,
+          file_path: h.file_path,
+          project: h.project,
+          start_line: h.start_line,
+          end_line: h.end_line,
+          language: h.language,
+          kind: h.chunk_type,
+          score: h.score,
+          match: 'semantic' as const,
+        }));
+      return jsonResult(fallback);
     },
   );
 
@@ -216,10 +243,10 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     },
   );
 
-  // 7. callers_of — TS/JS only.
+  // 7. callers_of — call edges across all supported languages.
   server.tool(
     'callers_of',
-    'Return all callers of a function/method name (TS/JS only).',
+    'Return all callers of a function/method name. Works across all supported languages (TS/JS, Java, C#, Python, Go, Rust, Ruby, PHP).',
     {
       callee: z.string().describe('Bare function or method name'),
       project: z.string().optional(),
@@ -234,10 +261,10 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     },
   );
 
-  // 8. callees_of — TS/JS only.
+  // 8. callees_of — call edges across all supported languages.
   server.tool(
     'callees_of',
-    'Return all callees invoked from a function/method name (TS/JS only).',
+    'Return all callees invoked from a function/method name. Works across all supported languages (TS/JS, Java, C#, Python, Go, Rust, Ruby, PHP).',
     {
       caller: z.string().describe('Caller as `Name` or `Class.method`'),
       project: z.string().optional(),
@@ -447,7 +474,7 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
   // 17. analyze_decomposition — suggest service boundaries for a monolith.
   server.tool(
     'analyze_decomposition',
-    'Analyze a project\'s module dependency graph (from call edges) and suggest microservice boundaries: per-module cohesion + instability + fan-in/out, candidate "seams" (cohesive, loosely-coupled modules to extract first), and the tightest cross-module couplings (the hardest joints to cut). Use for monolith-to-microservices migration planning. Best for TS/JS today (call edges); other languages fall back to module structure.',
+    'Analyze a project\'s module dependency graph (from call edges) and suggest microservice boundaries: per-module cohesion + instability + fan-in/out, candidate "seams" (cohesive, loosely-coupled modules to extract first), and the tightest cross-module couplings (the hardest joints to cut). Use for monolith-to-microservices migration planning. Uses call edges, extracted across all supported languages (TS/JS, Java, C#, Python, Go, Rust, Ruby, PHP).',
     {
       project: z.string().describe('Project name as listed by list_projects'),
       depth: z
@@ -461,6 +488,233 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ project, depth }) => {
       const inputs = await fetchDecompositionInputs(client, project);
       return jsonResult(decomposeProject(project, inputs, { moduleDepth: depth ?? 1 }));
+    },
+  );
+
+  // 18. trace_flow — multi-hop call traversal (impact analysis).
+  server.tool(
+    'trace_flow',
+    'Trace a function/method call chain several hops outward — downstream (callees), upstream (callers), or both. Returns the edges found at each hop plus every reachable symbol. Use for "what does X eventually call", "what breaks if I change Y", and cross-cutting impact analysis. Works across all supported languages.',
+    {
+      symbol: z.string().describe('Function/method to start from — bare name or `Class.method`'),
+      direction: z
+        .enum(['callees', 'callers', 'both'])
+        .optional()
+        .describe('callees = downstream, callers = upstream, both (default)'),
+      max_hops: z.number().int().min(1).max(6).optional().describe('Traversal depth (default 3)'),
+      project: z.string().optional(),
+    },
+    async ({ symbol, direction, max_hops, project }) => {
+      const edges = await fetchCallEdges(client, project);
+      const result = traceFlow(
+        edges.map((e) => ({ caller: e.caller, callee: e.callee, file: e.file, line: e.line })),
+        symbol,
+        { direction: direction ?? 'both', maxHops: max_hops ?? 3 },
+      );
+      return jsonResult(result);
+    },
+  );
+
+  // 19. compare_systems — same query against two projects, side by side.
+  server.tool(
+    'compare_systems',
+    'Run one query against two projects and return both result sets side by side — for comparing how two systems implement the same concept (migrations, consolidating duplicate functionality, "does the new service cover what the old one did").',
+    {
+      query: z.string().describe('Free-text query to run against both projects'),
+      project_a: z.string().describe('First project name'),
+      project_b: z.string().describe('Second project name'),
+      limit: z.number().int().min(1).max(50).optional().describe('Hits per project (default 10)'),
+    },
+    async ({ query, project_a, project_b, limit }) => {
+      const want = limit ?? DEFAULT_LIMIT;
+      const [a, b] = await Promise.all([
+        search(client, { query, limit: want, project: project_a, ...SEARCH_KNOBS }),
+        search(client, { query, limit: want, project: project_b, ...SEARCH_KNOBS }),
+      ]);
+      return jsonResult({
+        query,
+        a: { project: project_a, hits: a },
+        b: { project: project_b, hits: b },
+      });
+    },
+  );
+
+  // 20. search_code_bulk — many queries, one merged/deduped result.
+  server.tool(
+    'search_code_bulk',
+    'Run several searches in one call and get a merged, de-duplicated result set (dedup by project + file + line range, each hit tagged with the query that found it). Cheaper than many round-trips when you have a list of concepts to locate.',
+    {
+      queries: z.array(z.string()).min(1).max(20).describe('List of search queries'),
+      project: z.string().optional(),
+      limit_per_query: z
+        .number()
+        .int()
+        .min(1)
+        .max(20)
+        .optional()
+        .describe('Hits per query before dedup (default 5)'),
+    },
+    async ({ queries, project, limit_per_query }) => {
+      const per = limit_per_query ?? 5;
+      const results = await Promise.all(
+        queries.map((q) =>
+          search(client, {
+            query: q,
+            limit: per,
+            ...(project ? { project } : {}),
+            ...SEARCH_KNOBS,
+          }),
+        ),
+      );
+      const seen = new Set<string>();
+      const hits: (SearchHit & { matched_query: string })[] = [];
+      queries.forEach((q, i) => {
+        for (const h of results[i] ?? []) {
+          const key = `${h.project}::${h.file_path}:${h.start_line}-${h.end_line}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hits.push({ ...h, matched_query: q });
+        }
+      });
+      return jsonResult({ queries, total: hits.length, hits });
+    },
+  );
+
+  // 21. get_full_file — reconstruct a whole file from its chunks.
+  server.tool(
+    'get_full_file',
+    'Reconstruct a whole indexed file by concatenating its chunks in line order. Returns the joined source plus chunk count and line span. Use when you need the entire file, not just search hits. (Reconstruction is approximate when chunks overlap or leave gaps.)',
+    {
+      file_path: z.string().describe('Path as stored in the index'),
+      project: z.string().optional(),
+    },
+    async ({ file_path, project }) => {
+      const col = client.collections.get(CODE_CHUNK);
+      const base = col.filter.byProperty('file_path').equal(file_path);
+      const f = project ? Filters.and(base, col.filter.byProperty('project').equal(project)) : base;
+      const res = await col.query.fetchObjects({ filters: f, limit: 1000 });
+      const ordered = [...res.objects]
+        .map((o) => o.properties as Record<string, unknown>)
+        .sort((a, b) => Number(a['start_line'] ?? 0) - Number(b['start_line'] ?? 0));
+      if (ordered.length === 0) {
+        return jsonResult({
+          file_path,
+          project: project ?? null,
+          error: 'no chunks indexed for this file',
+        });
+      }
+      const seen = new Set<string>();
+      const distinct = ordered.filter((c) => {
+        const key = `${c['start_line']}-${c['end_line']}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const content = distinct
+        .map((c) => String(c['raw_content'] ?? c['content'] ?? ''))
+        .join('\n');
+      const last = distinct[distinct.length - 1];
+      return jsonResult({
+        file_path,
+        project: distinct[0]?.['project'] ?? project ?? null,
+        language: distinct[0]?.['language'] ?? null,
+        chunks: distinct.length,
+        start_line: distinct[0]?.['start_line'] ?? null,
+        end_line: last?.['end_line'] ?? null,
+        content,
+      });
+    },
+  );
+
+  // 22. search_code_by_file — search scoped to a path glob.
+  server.tool(
+    'search_code_by_file',
+    'Search within files whose path matches a glob/substring — e.g. scope a query to "src/auth" or "*.controller.ts". Omit the query to just list the chunks in those files in line order.',
+    {
+      path: z.string().describe('File path, prefix, or wildcard (`*`, `?`) to scope to'),
+      query: z.string().optional().describe('Optional query; omit to list chunks in the path'),
+      project: z.string().optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+    },
+    async ({ path, query, project, limit }) => {
+      const col = client.collections.get(CODE_CHUNK);
+      const pattern = toPathPattern(path);
+      if (!query) {
+        const clauses = [
+          col.filter.byProperty('file_path').like(pattern),
+          project ? col.filter.byProperty('project').equal(project) : undefined,
+        ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const f = clauses.length === 1 ? clauses[0]! : Filters.and(...clauses);
+        const res = await col.query.fetchObjects({ filters: f, limit: limit ?? 50 });
+        const rows = [...res.objects]
+          .map((o) => o.properties as Record<string, unknown>)
+          .sort(
+            (a, b) =>
+              String(a['file_path']).localeCompare(String(b['file_path'])) ||
+              Number(a['start_line'] ?? 0) - Number(b['start_line'] ?? 0),
+          )
+          .map((p) => ({
+            file_path: p['file_path'],
+            project: p['project'],
+            start_line: p['start_line'],
+            end_line: p['end_line'],
+            language: p['language'],
+            chunk_type: p['chunk_type'],
+            symbol: p['symbol'],
+            content: p['raw_content'] ?? p['content'],
+          }));
+        return jsonResult(rows);
+      }
+      // With a query: run the full search pipeline, then keep only path matches.
+      const want = limit ?? DEFAULT_LIMIT;
+      const hits = await search(client, {
+        query,
+        limit: want * 4,
+        ...(project ? { project } : {}),
+        ...SEARCH_KNOBS,
+      });
+      const filtered = hits.filter((h) => matchesWildcard(pattern, h.file_path)).slice(0, want);
+      return jsonResult(filtered);
+    },
+  );
+
+  // 23. get_project_structure — directory-grouped file tree.
+  server.tool(
+    'get_project_structure',
+    'Return the indexed file tree for a project, grouped by directory with per-directory and per-language file counts. A fast orientation map of what exists, without reading any file contents.',
+    {
+      project: z.string().optional(),
+      language: z.string().optional(),
+    },
+    async ({ project, language }) => {
+      const col = client.collections.get(CODE_CHUNK);
+      const clauses = [
+        project ? col.filter.byProperty('project').equal(project) : undefined,
+        language ? col.filter.byProperty('language').equal(language) : undefined,
+      ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+      const f =
+        clauses.length === 0
+          ? undefined
+          : clauses.length === 1
+            ? // clauses.length is checked above; index access is safe.
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              clauses[0]!
+            : Filters.and(...clauses);
+      const res = await col.query.fetchObjects({
+        ...(f ? { filters: f } : {}),
+        limit: 10000,
+        returnProperties: ['file_path', 'project', 'language'],
+      });
+      const files = res.objects.map((o) => {
+        const p = o.properties as Record<string, unknown>;
+        return {
+          file_path: String(p['file_path'] ?? ''),
+          project: String(p['project'] ?? ''),
+          language: String(p['language'] ?? ''),
+        };
+      });
+      return jsonResult(buildProjectStructure(files));
     },
   );
 

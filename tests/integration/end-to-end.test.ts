@@ -166,13 +166,24 @@ after(async () => {
 });
 
 describe('end-to-end via MCP', () => {
-  it('lists the 10 tools the server advertises', async () => {
+  it('lists the 23 tools the server advertises', async () => {
     const { tools } = await mcpClient.listTools();
     const names = tools.map((t) => t.name).sort();
-    assert.equal(tools.length, 10, `expected 10 tools, got ${tools.length}: ${names.join(', ')}`);
+    assert.equal(tools.length, 23, `expected 23 tools, got ${tools.length}: ${names.join(', ')}`);
     assert.ok(names.includes('search'));
     assert.ok(names.includes('find_symbol'));
     assert.ok(names.includes('list_projects'));
+    // Parity tools.
+    for (const t of [
+      'trace_flow',
+      'compare_systems',
+      'search_code_bulk',
+      'get_full_file',
+      'search_code_by_file',
+      'get_project_structure',
+    ]) {
+      assert.ok(names.includes(t), `expected tool ${t}`);
+    }
   });
 
   it('search returns hits for an indexed identifier', async () => {
@@ -255,5 +266,111 @@ describe('end-to-end via MCP', () => {
     // Could be 0 if the function body has no calls; main check is that the
     // tool returns a well-formed array without throwing.
     assert.ok(Array.isArray(edges));
+  });
+
+  it('get_project_structure groups the fixture files by directory', async () => {
+    const s = parseToolResult<{
+      totalFiles: number;
+      directories: { dir: string; paths: string[] }[];
+    }>(
+      await mcpClient.callTool({
+        name: 'get_project_structure',
+        arguments: { project: 'fixture' },
+      }),
+    );
+    assert.ok(s.totalFiles >= 3, `expected ≥3 files, got ${s.totalFiles}`);
+    const src = s.directories.find((d) => d.dir === 'src');
+    assert.ok(src, 'expected a src/ directory');
+    assert.ok(src.paths.some((p) => p.endsWith('auth.ts')));
+  });
+
+  it('get_full_file reconstructs an indexed file', async () => {
+    const f = parseToolResult<{ content: string; chunks: number; error?: string }>(
+      await mcpClient.callTool({
+        name: 'get_full_file',
+        arguments: { file_path: 'src/config.ts', project: 'fixture' },
+      }),
+    );
+    assert.ok(!f.error, `unexpected error: ${f.error}`);
+    assert.ok(f.chunks >= 1);
+    assert.match(f.content, /class Config/);
+  });
+
+  it('search_code_by_file scopes a query to a path', async () => {
+    const hits = parseToolResult<{ file_path: string }[]>(
+      await mcpClient.callTool({
+        name: 'search_code_by_file',
+        arguments: { path: 'config', query: 'load save', project: 'fixture' },
+      }),
+    );
+    assert.ok(Array.isArray(hits));
+    assert.ok(
+      hits.every((h) => /config\.ts$/.test(h.file_path)),
+      'all hits should come from config.ts',
+    );
+  });
+
+  it('search_code_by_file with no query lists chunks in the path', async () => {
+    const rows = parseToolResult<{ file_path: string }[]>(
+      await mcpClient.callTool({
+        name: 'search_code_by_file',
+        arguments: { path: 'src/utils.ts', project: 'fixture' },
+      }),
+    );
+    assert.ok(rows.length >= 1);
+    assert.ok(rows.every((r) => /utils\.ts$/.test(r.file_path)));
+  });
+
+  it('search_code_bulk merges and dedupes multiple queries', async () => {
+    const res = parseToolResult<{
+      total: number;
+      hits: { file_path: string; start_line: number; end_line: number; matched_query: string }[];
+    }>(
+      await mcpClient.callTool({
+        name: 'search_code_bulk',
+        arguments: { queries: ['authenticate', 'Config'], project: 'fixture', limit_per_query: 5 },
+      }),
+    );
+    assert.ok(res.total >= 1);
+    const keys = res.hits.map((h) => `${h.file_path}:${h.start_line}-${h.end_line}`);
+    assert.equal(new Set(keys).size, keys.length, 'expected de-duplicated hits');
+    assert.ok(res.hits.every((h) => typeof h.matched_query === 'string'));
+  });
+
+  it('trace_flow returns a well-formed traversal from a symbol', async () => {
+    const r = parseToolResult<{
+      center: string;
+      nodes: string[];
+      hops: unknown[];
+      truncated: boolean;
+    }>(
+      await mcpClient.callTool({
+        name: 'trace_flow',
+        arguments: {
+          symbol: 'authenticate',
+          direction: 'callees',
+          max_hops: 2,
+          project: 'fixture',
+        },
+      }),
+    );
+    assert.equal(r.center, 'authenticate');
+    assert.ok(r.nodes.includes('authenticate'));
+    assert.ok(Array.isArray(r.hops));
+  });
+
+  it('compare_systems returns two labelled result sets', async () => {
+    const r = parseToolResult<{
+      a: { project: string; hits: unknown[] };
+      b: { project: string; hits: unknown[] };
+    }>(
+      await mcpClient.callTool({
+        name: 'compare_systems',
+        arguments: { query: 'authenticate', project_a: 'fixture', project_b: 'fixture' },
+      }),
+    );
+    assert.equal(r.a.project, 'fixture');
+    assert.equal(r.b.project, 'fixture');
+    assert.ok(Array.isArray(r.a.hits) && Array.isArray(r.b.hits));
   });
 });

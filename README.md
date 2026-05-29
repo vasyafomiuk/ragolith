@@ -20,7 +20,7 @@ A **tool-agnostic SDLC knowledge platform**: index everything across the softwar
 - **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate. Also ingests **SDLC artifacts** from a portable interchange format (see below).
 - **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter — over both code and SDLC artifacts.
 - **Analyze** — `ragolith-analyze` finds **traceability gaps** (unimplemented requirements, untested code, orphan tests, dangling links), flags **modernization** targets (end-of-life runtimes + frameworks), and suggests **microservice seams** for monolith decomposition.
-- **Serve** — an MCP server over stdio exposing 17 tools (search, find symbol, callers/callees, tech stack, search_sdlc, list/get artifact, analyze_gaps, analyze_modernization, analyze_decomposition, …) for any MCP-aware LLM client.
+- **Serve** — an MCP server over stdio exposing 23 tools (search, find symbol, callers/callees, trace_flow, get full file, project structure, compare systems, tech stack, search_sdlc, list/get artifact, analyze_gaps, analyze_modernization, analyze_decomposition, …) for any MCP-aware LLM client.
 - **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, edit `ragc.config.json`, kick off ingest/backup jobs with live progress, and check stack health.
 - **Backup** — Weaviate filesystem backups with optional S3 push/pull.
 
@@ -305,11 +305,12 @@ VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mc
 
 ### Smoke-testing without a client
 
-Once wired, you can call any of the 17 tools through the client's tool UI:
+Once wired, you can call any of the 23 tools through the client's tool UI:
 
-- **Code & docs**: `search`, `search_code`, `search_docs`, `find_symbol`, `file_structure`, `read_chunk`, `callers_of`, `callees_of`, `list_projects`, `list_files`, `tech_stack`
+- **Code & docs**: `search`, `search_code`, `search_docs`, `search_code_bulk`, `search_code_by_file`, `find_symbol`, `file_structure`, `read_chunk`, `get_full_file`, `get_project_structure`, `list_projects`, `list_files`, `tech_stack`
+- **Call graph**: `callers_of`, `callees_of`, `trace_flow`
 - **SDLC artifacts**: `search_sdlc`, `list_artifacts`, `get_artifact`
-- **Analysis**: `analyze_gaps`, `analyze_modernization`, `analyze_decomposition`
+- **Analysis**: `analyze_gaps`, `analyze_modernization`, `analyze_decomposition`, `compare_systems`
 
 The integration test in [`tests/integration/end-to-end.test.ts`](tests/integration/end-to-end.test.ts) shows the same calls made programmatically with the MCP SDK.
 

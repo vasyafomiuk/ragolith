@@ -6,6 +6,15 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Six new MCP tools (17 → 23) for code navigation & comparison.** All are thin readers over the existing `CodeChunk` / `SymbolRecord` / `CallEdge` indexes — no re-ingest required:
+  - **`trace_flow`** — multi-hop call traversal from a symbol, downstream (callees), upstream (callers), or both. Returns the edges found at each hop plus every reachable symbol, with cycle termination and an edge cap. Use for "what does X eventually call" / "what breaks if I change Y" impact analysis. Works across all eight chunked languages. (New pure `traceFlow` BFS in `core/analysis/callgraph.ts`.)
+  - **`compare_systems`** — runs one query against two projects and returns both result sets side by side, for migration / consolidation comparisons.
+  - **`search_code_bulk`** — runs several queries in one call and returns a merged, de-duplicated result set (dedup by project + file + line span; each hit tagged with the query that found it).
+  - **`get_full_file`** — reconstructs a whole indexed file by concatenating its chunks in line order.
+  - **`search_code_by_file`** — search scoped to a path glob/substring (`src/auth`, `*.controller.ts`); with no query, lists the chunks in those files in line order.
+  - **`get_project_structure`** — directory-grouped file tree with per-directory and per-language counts (a fast orientation map). New pure `buildProjectStructure` in `core/structure.ts`.
+  - **`find_symbol`** now **falls back to semantic search** when there is no exact/prefix declaration, returning related symbols so a fuzzy or misspelled name still leads somewhere.
+  - Fixed stale "TS/JS only" notes on `callers_of` / `callees_of` (call edges have spanned all eight languages since the tree-sitter work) and the `analyze_decomposition` description.
 - **Interactive graphs + search navigation.** Click a symbol in a code search result to jump straight to its project and open the ego call graph for it. Click any node in the call graph to re-center on that symbol (drill through callers ↔ callees). Click an artifact node in the traceability map to see its details (kind, status, body, links) inline.
 - **Visual graphs over indexed data.** A single reusable force-directed SVG renderer (deterministic, zero deps) now powers four views:
   - **Service / dependency map on the project page** — open a project from Home and its module dependency graph renders automatically, with a **Modules / Files** granularity toggle (file-level aggregates call edges per file). No more digging into Analysis → Run.

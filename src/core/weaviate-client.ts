@@ -448,14 +448,17 @@ export interface CallEdgeRow {
   line: number;
 }
 
-/** Fetch all call edges for a project (full rows). Powers ego call graphs. */
+/**
+ * Fetch call edges (full rows). With a `project` they are scoped to it; omit
+ * it to fetch across all projects. Powers ego call graphs and trace_flow.
+ */
 export async function fetchCallEdges(
   client: WeaviateClient,
-  project: string,
+  project?: string,
 ): Promise<CallEdgeRow[]> {
   const col = client.collections.get(CALL_EDGE);
   const res = await col.query.fetchObjects({
-    filters: col.filter.byProperty('project').equal(project),
+    ...(project ? { filters: col.filter.byProperty('project').equal(project) } : {}),
     limit: 10000,
     returnProperties: ['caller', 'callee', 'call_type', 'file', 'line'],
   });
