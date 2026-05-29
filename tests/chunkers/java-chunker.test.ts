@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { chunkJava } from '../../src/core/chunkers/java-chunker.js';
+import { pickChunker } from '../../src/core/chunkers/dispatch.js';
+
+// Exercise the real dispatch path (java routes through tree-sitter + fallback).
+const chunkJava = (content: string, opts: { filePath: string; project: string }) =>
+  pickChunker({ ...opts, content, language: 'java' });
 
 describe('chunkJava', () => {
   it('extracts a class plus its methods', async () => {

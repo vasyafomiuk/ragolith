@@ -150,34 +150,34 @@ function pythonCallee(call: Node): { name: string; viaMember: boolean } | undefi
   return undefined;
 }
 
-const GO_ID = new Set(['identifier', 'field_identifier', 'type_identifier']);
+// Go and Rust both name callees with the same node types.
+const GO_RUST_ID = new Set(['identifier', 'field_identifier', 'type_identifier']);
 /** Go `call_expression` → `identifier` or `selector_expression` (pkg/recv.Fn). */
 function goCallee(call: Node): { name: string; viaMember: boolean } | undefined {
   const callee = call.namedChildren[0];
   if (!callee) return undefined;
   if (callee.type === 'selector_expression') {
-    const name = lastChildText(callee, GO_ID);
+    const name = lastChildText(callee, GO_RUST_ID);
     return name ? { name, viaMember: true } : undefined;
   }
   if (callee.type === 'identifier') return { name: callee.text, viaMember: false };
   return undefined;
 }
 
-const RUST_ID = new Set(['identifier', 'field_identifier', 'type_identifier']);
 /** Rust `call_expression` (fn/method/assoc) + `macro_invocation`. */
 function rustCallee(call: Node): { name: string; viaMember: boolean } | undefined {
   if (call.type === 'macro_invocation') {
-    const name = lastChildText(call, RUST_ID);
+    const name = lastChildText(call, GO_RUST_ID);
     return name ? { name, viaMember: false } : undefined;
   }
   const callee = call.namedChildren[0];
   if (!callee) return undefined;
   if (callee.type === 'field_expression') {
-    const name = lastChildText(callee, RUST_ID);
+    const name = lastChildText(callee, GO_RUST_ID);
     return name ? { name, viaMember: true } : undefined;
   }
   if (callee.type === 'scoped_identifier') {
-    const name = lastChildText(callee, RUST_ID) ?? lastSegment(callee.text);
+    const name = lastChildText(callee, GO_RUST_ID) ?? lastSegment(callee.text);
     return name ? { name, viaMember: false } : undefined;
   }
   if (callee.type === 'identifier') return { name: callee.text, viaMember: false };

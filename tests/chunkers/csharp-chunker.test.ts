@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { chunkCSharp } from '../../src/core/chunkers/csharp-chunker.js';
+import { pickChunker } from '../../src/core/chunkers/dispatch.js';
+
+// Exercise the real dispatch path (csharp routes through tree-sitter + fallback).
+const chunkCSharp = (content: string, opts: { filePath: string; project: string }) =>
+  pickChunker({ ...opts, content, language: 'csharp' });
 
 describe('chunkCSharp', () => {
   it('handles a block-scoped namespace with a class and method', async () => {

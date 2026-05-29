@@ -5,8 +5,13 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { chunkJava } from '../../src/core/chunkers/java-chunker.js';
-import { chunkCSharp } from '../../src/core/chunkers/csharp-chunker.js';
+import { pickChunker } from '../../src/core/chunkers/dispatch.js';
+
+// Exercise the real dispatch path (java/csharp route through tree-sitter + fallback).
+const chunkJava = (content: string, opts: { filePath: string; project: string }) =>
+  pickChunker({ ...opts, content, language: 'java' });
+const chunkCSharp = (content: string, opts: { filePath: string; project: string }) =>
+  pickChunker({ ...opts, content, language: 'csharp' });
 
 describe('chunkJava — tree-sitter wins', () => {
   it('extracts methods on a class decorated with annotations', async () => {

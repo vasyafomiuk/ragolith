@@ -4,7 +4,5 @@
 
 export { chunkFallback, applyProjectPrefix, type FallbackOptions } from './chunker.js';
 export { chunkAst, type AstOptions } from './ast-chunker.js';
-export { chunkJava, type JavaOptions } from './java-chunker.js';
-export { chunkCSharp, type CSharpOptions } from './csharp-chunker.js';
 export { chunkSql, type SqlOptions } from './sql-chunker.js';
 export { pickChunker, type DispatchArgs } from './dispatch.js';
