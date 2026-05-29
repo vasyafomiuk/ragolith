@@ -208,6 +208,36 @@ describe('parseCsproj', () => {
     assert.equal(map.get('MediatR'), '12.2.0');
     assert.equal(result.runtimes['dotnet'], 'net8.0');
   });
+
+  it('detects WPF / WinForms / Native AOT via MSBuild properties', () => {
+    const csproj = `
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+</Project>
+    `;
+    const result = parseCsproj(csproj)!;
+    const names = result.deps.map((d) => d.name);
+    assert.ok(names.includes('@dotnet/wpf'));
+    assert.ok(names.includes('@dotnet/winforms'));
+    assert.ok(names.includes('@dotnet/aot'));
+  });
+
+  it('detects Blazor / ASP.NET Core via SDK and reads TargetFrameworks (plural)', () => {
+    const web = parseCsproj(
+      '<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup></Project>',
+    )!;
+    assert.ok(web.deps.some((d) => d.name === '@dotnet/aspnetcore'));
+    assert.equal(web.runtimes['dotnet'], 'net8.0'); // first of the plural list
+
+    const blazor = parseCsproj('<Project Sdk="Microsoft.NET.Sdk.Razor"></Project>')!;
+    assert.ok(blazor.deps.some((d) => d.name === '@dotnet/blazor'));
+  });
 });
 
 describe('detectTechStack — end-to-end on a temp repo', () => {

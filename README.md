@@ -123,7 +123,7 @@ Each subcommand has a `--json` mode and a matching MCP tool (`analyze_gaps`, `an
 
 - **CodeChunk** — vectorized code/doc chunks with `file_path`, `project`, `lines`, `language`, `chunk_type`.
 - **SymbolRecord** — function/class/method index with `name`, `kind`, `signature`, `parent`, `exports`.
-- **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line` (TS/JS only).
+- **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line` (TS/JS, C#, and Java). Powers `callers_of`/`callees_of` and the decomposition graph.
 - **ProjectStack** — one row per project: detected `languages[]`, `build_tools[]`, `framework_names[]`, plus rich `frameworks_json` / `runtimes_json` / `manifests_json` blobs. Powers the `tech_stack` MCP tool and modernization analysis.
 - **SdlcArtifact** — vectorized SDLC artifacts (requirements, decisions, tickets, tests, …) with `artifact_id`, `kind`, `title`, `status`, `source`, `project`, `tags`, `links_json` + denormalized `link_rels`/`link_targets` facets. Powers `search_sdlc` and gap analysis.
 

@@ -103,6 +103,25 @@ const ALLOWLIST: AllowlistEntry[] = [
   { manifest: 'nuget', match: 'xunit', framework: 'xUnit' },
   { manifest: 'nuget', match: 'NUnit', framework: 'NUnit' },
   { manifest: 'nuget', match: 'Moq', framework: 'Moq' },
+  // Desktop / native / UI client frameworks — package-based.
+  { manifest: 'nuget', match: 'Avalonia', framework: 'Avalonia' },
+  { manifest: 'nuget', match: 'Microsoft.Maui.Controls', framework: '.NET MAUI' },
+  {
+    manifest: 'nuget',
+    match: 'Microsoft.AspNetCore.Components.WebAssembly',
+    framework: 'Blazor WebAssembly',
+  },
+  { manifest: 'nuget', match: 'Microsoft.WindowsAppSDK', framework: 'WinUI 3' },
+  { manifest: 'nuget', match: 'CommunityToolkit.Mvvm', framework: 'MVVM Toolkit' },
+  // Synthetic markers emitted by parseCsproj for MSBuild props / SDK (not real
+  // packages). The `@dotnet/*` names never collide with NuGet package ids.
+  { manifest: 'nuget', match: '@dotnet/wpf', framework: 'WPF' },
+  { manifest: 'nuget', match: '@dotnet/winforms', framework: 'WinForms' },
+  { manifest: 'nuget', match: '@dotnet/maui', framework: '.NET MAUI' },
+  { manifest: 'nuget', match: '@dotnet/aot', framework: 'Native AOT' },
+  { manifest: 'nuget', match: '@dotnet/blazor', framework: 'Blazor' },
+  { manifest: 'nuget', match: '@dotnet/aspnetcore', framework: 'ASP.NET Core' },
+  { manifest: 'nuget', match: '@dotnet/worker', framework: 'Worker Service' },
 ];
 
 // Gradle uses Maven coordinates; treat as equivalent for lookup. Same for
@@ -321,8 +340,32 @@ export function parseCsproj(content: string): ParseResult | undefined {
   }
 
   const runtimes: Record<string, string> = {};
-  const tfm = /<TargetFramework>\s*([^<]+?)\s*<\/TargetFramework>/.exec(content)?.[1];
+  // Singular <TargetFramework> or the first entry of plural <TargetFrameworks>.
+  const tfm =
+    /<TargetFramework>\s*([^<]+?)\s*<\/TargetFramework>/.exec(content)?.[1] ??
+    /<TargetFrameworks>\s*([^<;]+?)\s*[;<]/.exec(content)?.[1];
   if (tfm) runtimes['dotnet'] = tfm;
+
+  // MSBuild feature flags + SDK aren't NuGet packages, but they're the only
+  // reliable signal for WPF/WinForms/MAUI/Native-AOT/Blazor. Emit synthetic
+  // `@dotnet/*` deps that the allowlist maps to friendly framework names.
+  const featVersion = tfm ?? 'enabled';
+  const addFeature = (name: string): void => {
+    if (seen.has(name)) return;
+    deps.push({ name, version: featVersion });
+    seen.add(name);
+  };
+  if (/<UseWPF>\s*true\s*<\/UseWPF>/i.test(content)) addFeature('@dotnet/wpf');
+  if (/<UseWindowsForms>\s*true\s*<\/UseWindowsForms>/i.test(content))
+    addFeature('@dotnet/winforms');
+  if (/<UseMaui>\s*true\s*<\/UseMaui>/i.test(content)) addFeature('@dotnet/maui');
+  if (/<PublishAot>\s*true\s*<\/PublishAot>/i.test(content)) addFeature('@dotnet/aot');
+
+  const sdk = /<Project[^>]*\bSdk\s*=\s*"([^"]+)"/i.exec(content)?.[1] ?? '';
+  if (/Microsoft\.NET\.Sdk\.Web/i.test(sdk)) addFeature('@dotnet/aspnetcore');
+  if (/Microsoft\.NET\.Sdk\.Worker/i.test(sdk)) addFeature('@dotnet/worker');
+  if (/Microsoft\.NET\.Sdk\.Razor|BlazorWebAssembly/i.test(sdk)) addFeature('@dotnet/blazor');
+
   return { deps, runtimes };
 }
 

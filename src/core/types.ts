@@ -20,6 +20,8 @@ export type Language =
   | 'rust'
   | 'ruby'
   | 'php'
+  | 'xaml'
+  | 'razor'
   | 'markdown'
   | 'pdf'
   | 'docx'

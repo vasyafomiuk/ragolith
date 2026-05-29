@@ -104,17 +104,50 @@ const RUNTIME_RULES: Record<string, RuntimeRule> = {
       };
     return undefined;
   },
-  dotnet: (major) => {
-    if (major === undefined) return undefined;
-    if (major < 6)
+  // .NET needs TFM-aware classification, not a bare major: "net48" is legacy
+  // .NET Framework 4.8 (major would naively parse as 48), while "net8.0" is
+  // current. Inspect the raw target-framework moniker.
+  dotnet: (_major, raw) => classifyDotnetTfm(raw),
+};
+
+/**
+ * Classify a .NET target-framework moniker. Legacy .NET Framework (`net48`,
+ * `net472`, …) and .NET Core (`netcoreapp*`) are flagged; out-of-support modern
+ * versions (`net5.0`–`net7.0`) warn; `net8.0`+ and `netstandard*` pass.
+ */
+function classifyDotnetTfm(
+  raw: string,
+): Omit<ModernizationFinding, 'project' | 'category' | 'subject' | 'version'> | undefined {
+  const t = raw.toLowerCase().trim();
+  if (t.startsWith('netstandard')) return undefined; // library target — not an app signal
+
+  // .NET Framework: `net` + 2–3 digits, no dot (net20 … net481), or explicit.
+  if (/^net[1-4]\d{0,2}$/.test(t) || t.startsWith('netframework')) {
+    return {
+      severity: 'high',
+      finding: `Targets legacy .NET Framework (${raw}) — Windows-only, no longer the strategic runtime`,
+      recommendation: 'Migrate to modern .NET (8 LTS); target .NET Standard for shared libraries',
+    };
+  }
+  if (t.startsWith('netcoreapp')) {
+    return {
+      severity: 'high',
+      finding: `.NET Core (${raw}) is end-of-life`,
+      recommendation: 'Upgrade to .NET 8 (LTS)',
+    };
+  }
+  const m = /^net(\d+)\.\d+/.exec(t);
+  if (m) {
+    const major = Number(m[1]);
+    if (major < 8)
       return {
         severity: 'warning',
-        finding: `.NET ${major} is out of support`,
-        recommendation: 'Upgrade to a current .NET LTS (8+)',
+        finding: `.NET ${major} is out of support (only 8 LTS and newer are current)`,
+        recommendation: 'Upgrade to .NET 8 (LTS)',
       };
-    return undefined;
-  },
-};
+  }
+  return undefined;
+}
 
 interface FrameworkRule {
   /** Matches against the lowercased framework name. */

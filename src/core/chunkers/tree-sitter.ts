@@ -65,6 +65,13 @@ async function loadGrammar(name: GrammarName): Promise<Language> {
 
 // --- node type sets --------------------------------------------------------
 
+interface CallSpec {
+  /** AST node types that represent a call/invocation. */
+  types: Set<string>;
+  /** Extract the callee's simple name + whether it was via a receiver (obj.m()). */
+  extract: (call: Node) => { name: string; viaMember: boolean } | undefined;
+}
+
 interface TypeSets {
   /** Container declarations — emit chunk + symbol, descend into body for nested decls. */
   containers: Set<string>;
@@ -76,6 +83,43 @@ interface TypeSets {
   namespaces: Set<string>;
   /** How to compute the SymbolKind for a container node. */
   containerKind: (type: string) => SymbolKind;
+  /**
+   * Optional call-edge extraction. When set, calls inside method/function
+   * bodies become CallEdge records (powering callers_of/callees_of and the
+   * decomposition graph). Only defined for grammars where it's reliable.
+   */
+  calls?: CallSpec;
+}
+
+/** Rightmost simple identifier of a (possibly generic) name node. */
+function simpleName(node: Node | null): string | undefined {
+  if (!node) return undefined;
+  if (node.type === 'identifier') return node.text;
+  // generic_name (C#) / generic types: take the leading identifier child.
+  const id = node.namedChildren.find((c) => c?.type === 'identifier');
+  if (id) return id.text;
+  // Fall back to text before any generic/`<` marker.
+  const t = node.text.split('<')[0]?.trim();
+  return t || undefined;
+}
+
+/** C# `invocation_expression` → callee name. */
+function csharpCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  const fn = call.childForFieldName('function') ?? call.namedChildren[0] ?? null;
+  if (!fn) return undefined;
+  if (fn.type === 'member_access_expression') {
+    const name = simpleName(fn.childForFieldName('name'));
+    return name ? { name, viaMember: true } : undefined;
+  }
+  const name = simpleName(fn);
+  return name ? { name, viaMember: false } : undefined;
+}
+
+/** Java `method_invocation` → callee name. */
+function javaCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  const name = simpleName(call.childForFieldName('name'));
+  if (!name) return undefined;
+  return { name, viaMember: !!call.childForFieldName('object') };
 }
 
 const containerKindGeneric = (type: string): SymbolKind => {
@@ -99,6 +143,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(),
     namespaces: new Set(),
     containerKind: containerKindGeneric,
+    calls: { types: new Set(['method_invocation']), extract: javaCallee },
   },
   csharp: {
     containers: new Set([
@@ -113,6 +158,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(),
     namespaces: new Set(['namespace_declaration', 'file_scoped_namespace_declaration']),
     containerKind: containerKindGeneric,
+    calls: { types: new Set(['invocation_expression']), extract: csharpCallee },
   },
   python: {
     containers: new Set(['class_definition']),
@@ -388,6 +434,38 @@ function emitMethodLike(
     chunk_type: chunkTypeForKind(kind),
     symbol: fullName,
   });
+
+  collectCalls(node, fullName, ctx);
+}
+
+/**
+ * Walk a method/function subtree and emit a CallEdge for every call/invocation
+ * found, attributed to the enclosing symbol. No-op for grammars without a
+ * `calls` spec. Nested calls inside arguments are captured (DFS over children).
+ */
+function collectCalls(root: Node, caller: string, ctx: WalkCtx): void {
+  const spec = ctx.types.calls;
+  if (!spec) return;
+  const { opts, out } = ctx;
+  const stack: Node[] = [...root.namedChildren.filter((c): c is Node => !!c)];
+  while (stack.length > 0) {
+    const n = stack.pop();
+    if (!n) continue;
+    if (spec.types.has(n.type)) {
+      const callee = spec.extract(n);
+      if (callee && callee.name) {
+        out.edges.push({
+          caller,
+          callee: callee.name,
+          call_type: callee.viaMember ? 'method' : 'static',
+          file: opts.filePath,
+          line: n.startPosition.row + 1,
+          project: opts.project,
+        });
+      }
+    }
+    for (const ch of n.namedChildren) if (ch) stack.push(ch);
+  }
 }
 
 function walk(node: Node, parent: string | undefined, ctx: WalkCtx): void {

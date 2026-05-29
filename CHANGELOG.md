@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **C# / .NET native-app support deepened**:
+
+  - **Call edges for C# and Java** — the tree-sitter walker now extracts `caller → callee` edges from method/invocation bodies, so `callers_of`, `callees_of`, and the **decomposition / service-composition graph** work on C# and Java repos (previously TS/JS only).
+  - **Desktop / native framework detection** — `parseCsproj` now recognizes WPF, WinForms, .NET MAUI, Native AOT (`<PublishAot>`), Blazor, ASP.NET Core (SDK), and Worker Service from MSBuild properties + the project SDK, plus Avalonia / WinUI 3 / MVVM Toolkit from package refs. Reads `<TargetFrameworks>` (plural) too.
+  - **XAML / Razor indexing** — `.xaml`, `.razor`, `.cshtml` are now chunked + searchable (new `xaml` / `razor` languages), not just the `.cs` code-behind.
+  - **.NET Framework modernization fix** — TFMs are now classified properly: legacy `net48`/`net472` (.NET Framework) and `netcoreapp*` flag **high**, out-of-support `net5.0`–`net7.0` flag **warning**, `net8.0`+ / `netstandard*` pass. Previously `net48` slipped through as "major 48".
+
 - **Search effort presets** — tune the quality/token-consumption tradeoff from the dashboard Config view. Three one-click presets (**Max productivity** / **Balanced** / **Minimum tokens**) drive sliders for result count, max content chars per hit (the main token lever — truncates what an LLM ingests), over-fetch ×, and max hits/file, plus a reranker toggle. A live estimate shows approximate tokens per search. Nudging any slider switches to a "custom" profile. Persisted to `ragc.config.json`'s `search` block, so both the dashboard and the MCP server honor it. New `SEARCH_PROFILES` + `truncateContent` in core; `SearchConfig` gains `limit`, `maxContentChars`, `profile`.
 - **Service composition graph** — the dashboard's Analysis → Decomposition output now renders a force-directed SVG of the module dependency graph: nodes sized by file count and colored by cohesion (green = cohesive, amber = mixed, red = coupling-heavy), edges weighted by call volume, suggested seams ringed. Deterministic layout, vanilla SVG, no dependencies — reuses the existing decomposition data.
 

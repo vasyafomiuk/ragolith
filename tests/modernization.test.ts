@@ -117,9 +117,29 @@ describe('analyzeModernization — frameworks', () => {
     assert.equal(r.findings[r.findings.length - 1]?.severity, 'info');
   });
 
-  it('flags out-of-support .NET and ignores unknown runtimes', () => {
-    assert.equal(analyzeModernization(stack({ runtimes: { dotnet: '5' } })).counts.warning, 1);
-    assert.equal(analyzeModernization(stack({ runtimes: { dotnet: '8' } })).findings.length, 0);
+  it('classifies .NET target frameworks and ignores unknown runtimes', () => {
+    // Legacy .NET Framework — the key fix: net48 must not slip past as "major 48".
+    const fw = analyzeModernization(stack({ runtimes: { dotnet: 'net48' } }));
+    assert.equal(fw.counts.high, 1);
+    assert.match(fw.findings[0]!.finding, /\.NET Framework/);
+    assert.equal(analyzeModernization(stack({ runtimes: { dotnet: 'net472' } })).counts.high, 1);
+    // .NET Core — end of life.
+    assert.equal(
+      analyzeModernization(stack({ runtimes: { dotnet: 'netcoreapp3.1' } })).counts.high,
+      1,
+    );
+    // Modern but out-of-support.
+    assert.equal(analyzeModernization(stack({ runtimes: { dotnet: 'net5.0' } })).counts.warning, 1);
+    assert.equal(analyzeModernization(stack({ runtimes: { dotnet: 'net7.0' } })).counts.warning, 1);
+    // Current LTS + library target → clean.
+    assert.equal(
+      analyzeModernization(stack({ runtimes: { dotnet: 'net8.0' } })).findings.length,
+      0,
+    );
+    assert.equal(
+      analyzeModernization(stack({ runtimes: { dotnet: 'netstandard2.0' } })).findings.length,
+      0,
+    );
     // unknown runtime key → no rule → no finding
     assert.equal(analyzeModernization(stack({ runtimes: { ruby: '2.5' } })).findings.length, 0);
   });

@@ -39,3 +39,25 @@ public class Greeter {
     assert.equal(result.chunks[0]!.chunk_type, 'fallback');
   });
 });
+
+describe('chunkJava — call edges', () => {
+  it('extracts caller→callee edges from method invocations', async () => {
+    const src = `
+package shop;
+public class Orders {
+    private final Payments payments = new Payments();
+    public void checkout(int total) {
+        payments.charge(total);
+        notifyUser();
+    }
+    private void notifyUser() {}
+}
+`;
+    const result = await chunkJava(src, { filePath: 'Orders.java', project: 'p' });
+    const callees = result.edges.map((e) => e.callee);
+    assert.ok(callees.includes('charge'), `expected charge in ${JSON.stringify(callees)}`);
+    assert.ok(callees.includes('notifyUser'), `expected notifyUser in ${JSON.stringify(callees)}`);
+    const charge = result.edges.find((e) => e.callee === 'charge');
+    assert.equal(charge!.call_type, 'method'); // payments.charge(...)
+  });
+});

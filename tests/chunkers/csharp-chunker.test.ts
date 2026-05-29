@@ -51,3 +51,42 @@ public class A
     assert.equal(result.chunks[0]!.chunk_type, 'fallback');
   });
 });
+
+describe('chunkCSharp — call edges', () => {
+  it('extracts caller→callee edges from invocations', async () => {
+    const src = `
+namespace Shop
+{
+    public class Orders
+    {
+        public void Checkout(int total)
+        {
+            var p = new Payments();
+            p.Charge(total);
+            Notify();
+        }
+        private void Notify() { }
+    }
+}
+`;
+    const result = await chunkCSharp(src, { filePath: 'Orders.cs', project: 'p' });
+    const callees = result.edges.map((e) => e.callee);
+    // Member-access call (p.Charge) and bare call (Notify) both captured.
+    assert.ok(callees.includes('Charge'), `expected Charge in ${JSON.stringify(callees)}`);
+    assert.ok(callees.includes('Notify'), `expected Notify in ${JSON.stringify(callees)}`);
+
+    const charge = result.edges.find((e) => e.callee === 'Charge');
+    assert.equal(charge!.caller, 'Shop.Orders.Checkout');
+    assert.equal(charge!.call_type, 'method'); // via receiver p.
+    const notify = result.edges.find((e) => e.callee === 'Notify');
+    assert.equal(notify!.call_type, 'static'); // bare call
+  });
+
+  it('emits no edges for a call-free class', async () => {
+    const src = `
+public class Plain { public int X => 1; }
+`;
+    const result = await chunkCSharp(src, { filePath: 'Plain.cs', project: 'p' });
+    assert.equal(result.edges.length, 0);
+  });
+});
