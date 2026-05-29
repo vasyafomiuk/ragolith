@@ -354,15 +354,26 @@ async function renderProject(name) {
   $('project-meta').textContent = 'Loading…';
   const body = $('project-body');
   body.innerHTML = '';
-  $('callgraph-out').innerHTML =
-    '<span class="muted small">Enter a function/method name to see what calls it and what it calls.</span>';
-  $('callgraph-symbol').value = '';
   // Reset the granularity toggle to Modules.
   document.querySelectorAll('#view-project .seg-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.grain === 'module');
   });
 
   void renderProjectGraph(name, 'module');
+
+  // If the user clicked a symbol in search, jump straight into its call graph;
+  // otherwise reset the call-graph card to its prompt.
+  if (pendingCallSymbol && pendingCallSymbol.project === name) {
+    const sym = pendingCallSymbol.symbol;
+    pendingCallSymbol = null;
+    $('callgraph-symbol').value = sym;
+    void runCallGraph(sym);
+  } else {
+    pendingCallSymbol = null;
+    $('callgraph-out').innerHTML =
+      '<span class="muted small">Enter a function/method name to see what calls it and what it calls.</span>';
+    $('callgraph-symbol').value = '';
+  }
 
   try {
     const files = await api(`/api/projects/${encodeURIComponent(name)}/files`);
@@ -428,9 +439,7 @@ document.querySelectorAll('#view-project .seg-btn').forEach((btn) => {
 });
 
 // Ego call graph for a symbol within the current project.
-$('callgraph-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const symbol = $('callgraph-symbol').value.trim();
+async function runCallGraph(symbol) {
   const out = $('callgraph-out');
   if (!symbol || !currentProject) return;
   out.innerHTML = '<span class="muted small">Building call graph…</span>';
@@ -446,6 +455,22 @@ $('callgraph-form').addEventListener('submit', async (e) => {
   } catch (err) {
     out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
   }
+}
+
+$('callgraph-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  void runCallGraph($('callgraph-symbol').value.trim());
+});
+
+// Click any node in the call graph → re-center on that symbol (drill through).
+$('callgraph-out').addEventListener('click', (ev) => {
+  const g = ev.target.closest?.('[data-node-id]');
+  if (!g) return;
+  const id = g.dataset.nodeId;
+  // Node ids are `c:<center>`, `in:<name>`, `out:<name>` — strip the prefix.
+  const symbol = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
+  $('callgraph-symbol').value = symbol;
+  void runCallGraph(symbol);
 });
 
 // Ego call graph → nodes (center + callers + callees), edges (caller→center, center→callee).
@@ -476,11 +501,12 @@ function buildCallGraph(ego) {
     edges.push({ s: `c:${center}`, t: id, w: c.count, title: `${center} calls ${c.name}` });
   }
   return (
-    renderForceGraph(nodes, edges, { aria: 'call graph' }) +
+    renderForceGraph(nodes, edges, { aria: 'call graph', interactive: true }) +
     legendHtml([
       '<span><i class="dot" style="background:var(--accent)"></i>this symbol</span>',
       '<span><i class="dot" style="background:var(--warn)"></i>callers (in)</span>',
       '<span><i class="dot" style="background:var(--ok)"></i>callees (out)</span>',
+      '<span class="muted">click a node to re-center</span>',
     ])
   );
 }
@@ -510,8 +536,13 @@ async function ensureProjectFilter() {
 const DOC_LANGS = new Set(['pdf', 'docx', 'markdown', 'text']);
 
 function codeHitHtml(h) {
+  // A symbol hit links to its project's call graph (data-* read by a delegated
+  // click handler on #search-results).
+  const symbolTag = h.symbol
+    ? `<button type="button" class="hit-symbol" data-project="${escape(h.project)}" data-symbol="${escape(h.symbol)}" title="Show call graph for ${escape(h.symbol)}"><code>${escape(h.symbol)}</code></button>`
+    : '';
   const tags = [
-    h.symbol ? `<code>${escape(h.symbol)}</code>` : '',
+    symbolTag,
     `<span class="lang-pill">${escape(h.language)}</span>`,
     `<span class="muted">${escape(h.chunk_type)}</span>`,
     `<span class="score">${h.score.toFixed(3)}</span>`,
@@ -605,6 +636,19 @@ $('search-form').addEventListener('submit', (e) => {
 // Re-run when the scope changes if there's already a query, for quick pivoting.
 $('search-scope').addEventListener('change', () => {
   if ($('search-input').value.trim()) void doSearch();
+});
+
+// Click a symbol in a code hit → open its project and run the ego call graph.
+// The project page reads `pendingCallSymbol` once it renders.
+let pendingCallSymbol = null;
+$('search-results').addEventListener('click', (ev) => {
+  const btn = ev.target.closest?.('.hit-symbol');
+  if (!btn) return;
+  const project = btn.dataset.project;
+  const symbol = btn.dataset.symbol;
+  if (!project || !symbol) return;
+  pendingCallSymbol = { project, symbol };
+  window.location.hash = `#project/${encodeURIComponent(project)}`;
 });
 
 // ----- Analysis view --------------------------------------------------------
@@ -783,6 +827,9 @@ function isArtifactCodeRef(t) {
   return /^(repo|symbol|file|code):/i.test(t);
 }
 
+// Stash the last-rendered artifacts so node clicks can show details without refetching.
+let traceArtifactsById = new Map();
+
 $('analysis-run-trace').addEventListener('click', async () => {
   const out = $('analysis-trace-out');
   const project = $('analysis-project').value;
@@ -795,10 +842,38 @@ $('analysis-run-trace').addEventListener('click', async () => {
       out.innerHTML = '<span class="muted small">No SDLC artifacts indexed yet.</span>';
       return;
     }
+    traceArtifactsById = new Map(artifacts.map((a) => [a.artifact_id, a]));
     out.innerHTML = buildTraceabilityGraph(artifacts);
   } catch (err) {
     out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
   }
+});
+
+// Click an artifact node → show its details (from the already-loaded set).
+$('analysis-trace-out').addEventListener('click', (ev) => {
+  const g = ev.target.closest?.('[data-node-id]');
+  const panel = $('trace-detail');
+  if (!g || !panel) return;
+  const a = traceArtifactsById.get(g.dataset.nodeId);
+  if (!a) return; // code-ref or dangling node — nothing to show
+  const links = (a.links || [])
+    .map(
+      (l) =>
+        `<li><span class="muted small">${escape(l.rel)}</span> → <code>${escape(l.target)}</code></li>`,
+    )
+    .join('');
+  panel.innerHTML =
+    '<div class="trace-card">' +
+    `<div class="trace-card-head"><span class="lang-pill">${escape(a.kind)}</span> ` +
+    `<code>${escape(a.artifact_id)}</code> <strong>${escape(a.title)}</strong>` +
+    (a.status ? ` <span class="muted small">· ${escape(a.status)}</span>` : '') +
+    '</div>' +
+    (a.body
+      ? `<p class="muted small trace-body">${escape(a.body.slice(0, 400))}${a.body.length > 400 ? '…' : ''}</p>`
+      : '') +
+    (links ? `<ul class="seam-list">${links}</ul>` : '<p class="muted small">No links.</p>') +
+    '</div>';
+  panel.scrollIntoView({ block: 'nearest' });
 });
 
 function buildTraceabilityGraph(artifacts) {
@@ -867,13 +942,19 @@ function buildTraceabilityGraph(artifacts) {
     (capped
       ? `<p class="muted small">Showing first ${CAP} of ${artifacts.length} artifacts.</p>`
       : '') +
-    renderForceGraph(nodeArr, edges, { aria: 'SDLC traceability graph', height: 480 }) +
+    '<div id="trace-detail"></div>' +
+    renderForceGraph(nodeArr, edges, {
+      aria: 'SDLC traceability graph',
+      height: 480,
+      interactive: true,
+    }) +
     legendHtml([
       '<span><i class="dot" style="background:#2563eb"></i>requirement</span>',
       '<span><i class="dot" style="background:#7c3aed"></i>decision</span>',
       '<span><i class="dot" style="background:var(--ok)"></i>test</span>',
       '<span><i class="dot" style="background:var(--accent)"></i>code</span>',
       '<span><i class="ring" style="border-color:var(--bad)"></i>untraced / dangling</span>',
+      '<span class="muted">click an artifact for details</span>',
     ])
   );
 }
@@ -974,7 +1055,7 @@ function renderForceGraph(nodes, edges, opts = {}) {
       const raw = n.label ?? n.id ?? '';
       const label = raw.length > 18 ? raw.slice(0, 17) + '…' : raw;
       return (
-        '<g class="svc-node">' +
+        `<g class="svc-node" data-node-id="${escape(n.id)}">` +
         `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${n.fill ?? 'var(--accent)'}"${ring}>` +
         `${n.title ? `<title>${escape(n.title)}</title>` : ''}</circle>` +
         `<text x="${p.x.toFixed(1)}" y="${(p.y + r + 11).toFixed(1)}" class="svc-label">${escape(label)}</text>` +
@@ -984,7 +1065,7 @@ function renderForceGraph(nodes, edges, opts = {}) {
     .join('');
 
   return (
-    `<div class="svc-graph"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escape(opts.aria ?? 'graph')}">` +
+    `<div class="svc-graph${opts.interactive ? ' interactive' : ''}"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escape(opts.aria ?? 'graph')}">` +
     edgeSvg +
     nodeSvg +
     '</svg></div>'

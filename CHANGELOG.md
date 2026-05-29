@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Interactive graphs + search navigation.** Click a symbol in a code search result to jump straight to its project and open the ego call graph for it. Click any node in the call graph to re-center on that symbol (drill through callers ↔ callees). Click an artifact node in the traceability map to see its details (kind, status, body, links) inline.
 - **Visual graphs over indexed data.** A single reusable force-directed SVG renderer (deterministic, zero deps) now powers four views:
   - **Service / dependency map on the project page** — open a project from Home and its module dependency graph renders automatically, with a **Modules / Files** granularity toggle (file-level aggregates call edges per file). No more digging into Analysis → Run.
   - **Function call graph (ego)** — on the project page, enter a symbol to see its callers (incoming) and callees (outgoing) as a node-link graph, drawn from `CallEdge` across all eight languages. New `GET /api/callgraph` + `fetchCallEdges` core helper.
