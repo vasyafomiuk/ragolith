@@ -264,7 +264,10 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ project }) => {
       const stack = await getTechStack(client, project);
       if (!stack) {
-        return jsonResult({ project, error: 'no tech stack on file — has this project been ingested?' });
+        return jsonResult({
+          project,
+          error: 'no tech stack on file — has this project been ingested?',
+        });
       }
       return jsonResult(stack);
     },

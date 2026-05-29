@@ -66,7 +66,9 @@ describe('parsePomXml', () => {
     const result = parsePomXml(pom);
     assert.ok(result);
     assert.equal(result.deps.length, 2);
-    const spring = result.deps.find((d) => d.name === 'org.springframework.boot:spring-boot-starter');
+    const spring = result.deps.find(
+      (d) => d.name === 'org.springframework.boot:spring-boot-starter',
+    );
     assert.equal(spring?.version, '2.7.18');
     assert.equal(result.runtimes['java'], '17');
   });

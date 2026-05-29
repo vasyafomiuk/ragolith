@@ -22,6 +22,7 @@ import type {
   IngestConfig,
   RagolithConfig,
   RepoConfig,
+  SdlcSourceConfig,
   SearchConfig,
   WeaviateConnConfig,
 } from '../core/types.js';
@@ -34,6 +35,7 @@ export interface WizardAnswers {
   search: SearchConfig;
   repos: RepoConfig[];
   documents: DocumentConfig[];
+  sdlc: SdlcSourceConfig[];
   backup: BackupConfig;
 }
 
@@ -82,6 +84,7 @@ export function defaultAnswers(): WizardAnswers {
     },
     repos: [],
     documents: [],
+    sdlc: [],
     backup: { backend: 'filesystem' },
   };
 }
@@ -94,6 +97,7 @@ export function buildConfig(answers: WizardAnswers): RagolithConfig {
     search: answers.search,
     repos: answers.repos,
     documents: answers.documents,
+    sdlc: answers.sdlc,
     backup: answers.backup,
   };
 }

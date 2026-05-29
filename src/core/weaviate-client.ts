@@ -1,10 +1,11 @@
 // Weaviate connection + collection schema management.
 //
-// Four collections:
+// Five collections:
 //   - CodeChunk    — vectorized code/doc chunks; the primary search target.
 //   - SymbolRecord — function/class/method index for structural lookups.
 //   - CallEdge     — caller→callee edges (TS/JS only) for call-graph queries.
 //   - ProjectStack — per-project detected tech stack (frameworks, runtimes).
+//   - SdlcArtifact — vectorized SDLC artifacts (requirements, decisions, …).
 
 import weaviate, {
   generateUuid5,
@@ -21,6 +22,7 @@ export const CODE_CHUNK = 'CodeChunk';
 export const SYMBOL_RECORD = 'SymbolRecord';
 export const CALL_EDGE = 'CallEdge';
 export const PROJECT_STACK = 'ProjectStack';
+export const SDLC_ARTIFACT = 'SdlcArtifact';
 
 export async function connect(cfg: WeaviateConnConfig): Promise<WeaviateClient> {
   return weaviate.connectToCustom({
@@ -145,6 +147,54 @@ export async function ensureSchema(
       ],
     });
   }
+
+  if (!existing.has(SDLC_ARTIFACT)) {
+    await client.collections.create({
+      name: SDLC_ARTIFACT,
+      // Embed `title` + `body` (joined into `content`); the rest is filterable
+      // metadata. Links live in a JSON blob so the relationship vocabulary can
+      // grow without schema migrations — gap analysis parses links_json.
+      vectorizers: vectorizer.text2VecTransformers({
+        name: 'default',
+        sourceProperties: ['content'],
+      }),
+      ...(withReranker ? { reranker: reranker.transformers() } : {}),
+      invertedIndex: configure.invertedIndex({
+        indexNullState: true,
+        indexPropertyLength: true,
+      }),
+      properties: [
+        { name: 'content', dataType: dataType.TEXT },
+        { name: 'raw_body', dataType: dataType.TEXT, skipVectorization: true },
+        { name: 'artifact_id', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'title', dataType: dataType.TEXT },
+        { name: 'kind', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'status', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'source', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'project', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'tags', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'author', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'url', dataType: dataType.TEXT, skipVectorization: true },
+        { name: 'links_json', dataType: dataType.TEXT, skipVectorization: true },
+        // Denormalized link facets for cheap filtering without parsing JSON.
+        { name: 'link_rels', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'link_targets', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'created_at', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'updated_at', dataType: dataType.TEXT, tokenization: 'field' },
+      ],
+    });
+  }
+}
+
+/** Stable UUID for an artifact — source + id is unique. */
+export function artifactUuid(source: string, artifactId: string): string {
+  return generateUuid5(`sdlc::${source}::${artifactId}`);
+}
+
+/** Delete every artifact belonging to one SDLC source label. */
+export async function deleteSdlcSource(client: WeaviateClient, source: string): Promise<void> {
+  const col = client.collections.get(SDLC_ARTIFACT);
+  await col.data.deleteMany(col.filter.byProperty('source').equal(source));
 }
 
 /**

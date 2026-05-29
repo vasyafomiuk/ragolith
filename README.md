@@ -54,25 +54,25 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 ## Components
 
-| Component        | File                                  | Role                                                                            |
-| ---------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
-| MCP Server       | `src/mcp/server.ts`                   | 11 search/structure tools exposed to LLM clients                                |
-| Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health             |
+| Component        | File                                  | Role                                                                                                           |
+| ---------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| MCP Server       | `src/mcp/server.ts`                   | 11 search/structure tools exposed to LLM clients                                                               |
+| Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health                                            |
 | Manifest Scanner | `src/core/manifest-scan.ts`           | Detects frameworks + runtime versions from package.json / pom.xml / gradle / pyproject / requirements / csproj |
-| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                           |
-| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                          |
-| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges       |
-| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records |
-| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | tree-sitter via web-tree-sitter; attributes, file-scoped namespaces, records    |
-| Other Chunkers   | `src/core/chunkers/tree-sitter.ts`    | Python, Go, Rust, Ruby, PHP — all via tree-sitter                               |
-| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                                    |
-| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                        |
-| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                            |
-| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                         |
-| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                                     |
-| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                             |
-| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                       |
-| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                                |
+| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                                                          |
+| Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                                                         |
+| AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges                                      |
+| Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records                                |
+| C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | tree-sitter via web-tree-sitter; attributes, file-scoped namespaces, records                                   |
+| Other Chunkers   | `src/core/chunkers/tree-sitter.ts`    | Python, Go, Rust, Ruby, PHP — all via tree-sitter                                                              |
+| SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                                                                   |
+| Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                                                       |
+| Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                                                           |
+| File Reader      | `src/core/file-reader.ts`             | PDF (pdfjs-dist), DOCX (mammoth), UTF-8                                                                        |
+| Git Manager      | `src/core/git-manager.ts`             | Clone/fetch/diff, token auth, push disabled                                                                    |
+| Config           | `src/core/config.ts`                  | env > `ragc.config.json` > defaults                                                                            |
+| Search           | `src/core/search.ts`                  | classify → expand → hybrid → rerank → autocut → diversity                                                      |
+| Weaviate Client  | `src/core/weaviate-client.ts`         | Connection + collection schemas, batched deletes                                                               |
 
 ## Data model (Weaviate collections)
 

@@ -52,6 +52,7 @@ const DEFAULTS: RagolithConfig = {
   },
   repos: [],
   documents: [],
+  sdlc: [],
   backup: {
     backend: 'filesystem',
   },

@@ -145,6 +145,111 @@ export type ProjectConfig = RepoConfig;
  */
 export type FileConfig = DocumentConfig;
 
+// --- SDLC artifacts --------------------------------------------------------
+//
+// ragolith indexes more than code: requirements, decisions, tickets, tests,
+// runbooks, API specs — the whole software-development lifecycle. These arrive
+// in a tool-agnostic interchange format (RSIF — see core/sdlc.ts) so ragolith
+// never depends on Jira/Confluence/Linear/etc. APIs. Adapters convert vendor
+// exports into RSIF; the format is the contract.
+
+/**
+ * The kind of SDLC artifact. Open-ended on purpose: anything unrecognized maps
+ * to `other` rather than being rejected, so a new tool's export still indexes.
+ */
+export type SdlcArtifactKind =
+  | 'requirement'
+  | 'story'
+  | 'epic'
+  | 'feature'
+  | 'decision' // ADR / design decision
+  | 'ticket' // bug / task / issue
+  | 'risk'
+  | 'test_case'
+  | 'runbook'
+  | 'api_spec'
+  | 'design_doc'
+  | 'meeting_note'
+  | 'incident'
+  | 'other';
+
+/**
+ * How one artifact relates to another artifact or to code. The vocabulary is
+ * deliberately small and bidirectional-aware so gap analysis can traverse it:
+ * a requirement `implemented_by` code, code `tested_by` a test_case, a decision
+ * that `supersedes` an earlier one. `target` is either another artifact's
+ * `artifact_id` or a code reference like `repo:my-app/src/foo.ts` or
+ * `symbol:my-app/PaymentService.charge`.
+ */
+export type ArtifactLinkRel =
+  | 'implements'
+  | 'implemented_by'
+  | 'tests'
+  | 'tested_by'
+  | 'depends_on'
+  | 'blocks'
+  | 'blocked_by'
+  | 'relates_to'
+  | 'supersedes'
+  | 'superseded_by'
+  | 'derived_from'
+  | 'refines'
+  | 'mitigates'
+  | 'parent_of'
+  | 'child_of';
+
+export interface ArtifactLink {
+  rel: ArtifactLinkRel;
+  /** Another artifact_id, or a `repo:`/`symbol:`/`file:` code reference. */
+  target: string;
+}
+
+/**
+ * One SDLC artifact, normalized from RSIF. The `body` is the searchable prose;
+ * everything else is filterable metadata. `source` names the system of record
+ * (free-form: "jira", "confluence", "github", "local", …) so the index stays
+ * tool-agnostic.
+ */
+export interface SdlcArtifact {
+  /** Stable id, unique within a source. e.g. "PROJ-123", "ADR-0007". */
+  artifact_id: string;
+  kind: SdlcArtifactKind;
+  title: string;
+  /** Markdown / plain-text prose. Chunked + embedded for search. */
+  body: string;
+  /** Lifecycle status, free-form: "open", "in_progress", "done", "deprecated". */
+  status?: string;
+  /** System of record this came from. Free-form, lowercased by convention. */
+  source: string;
+  /** Logical product/project this belongs to — ties into the repo `project`. */
+  project: string;
+  links: ArtifactLink[];
+  tags: string[];
+  /** Original author / reporter, if known. */
+  author?: string;
+  /** Back-link to the artifact in its source system. */
+  url?: string;
+  /** ISO timestamps if known. */
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * One SDLC source to ingest. Points at a directory of RSIF files (`.md` /
+ * `.ndjson` / `.jsonl`) or a single such file. `source` labels every artifact
+ * read from it (overridable per-artifact in the file). Incremental tracking is
+ * via mtime, stored in `state.sdlc[name]`.
+ */
+export interface SdlcSourceConfig {
+  name: string;
+  /** Absolute path to a directory of RSIF files, or a single RSIF file. */
+  path: string;
+  /** Default `source` label for artifacts that don't declare their own. */
+  source?: string;
+  /** Default `project` for artifacts that don't declare their own. */
+  project?: string;
+}
+
 export interface WeaviateConnConfig {
   host: string;
   httpPort: number;
@@ -183,6 +288,8 @@ export interface RagolithConfig {
   repos: RepoConfig[];
   /** Standalone documents (PDF / DOCX / TXT / MD) to index. */
   documents: DocumentConfig[];
+  /** SDLC artifact sources (RSIF directories/files) to index. */
+  sdlc: SdlcSourceConfig[];
   backup: BackupConfig;
 }
 
@@ -190,6 +297,8 @@ export interface RagolithConfig {
 export interface IngestState {
   projects: Record<string, { commit_sha: string; updated_at: string }>;
   files: Record<string, { mtime_ms: number; updated_at: string }>;
+  /** Per-SDLC-source last-ingest marker (mtime of newest file seen). */
+  sdlc?: Record<string, { mtime_ms: number; updated_at: string; count: number }>;
 }
 
 /** The kind of manifest file a dependency entry came from. */

@@ -226,7 +226,7 @@ export function parseRequirementsTxt(content: string): ParseResult | undefined {
     if (!line) continue;
     // Skip -r/-e includes, URL installs, hash specifications.
     if (line.startsWith('-') || line.includes('://')) continue;
-    const m = /^([A-Za-z0-9_.\-]+)(?:\[[^\]]+\])?\s*(?:([<>=!~]=?)\s*([^;\s]+))?/.exec(line);
+    const m = /^([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?\s*(?:([<>=!~]=?)\s*([^;\s]+))?/.exec(line);
     if (!m) continue;
     const name = m[1];
     const op = m[2];
@@ -250,7 +250,7 @@ export function parsePyprojectToml(content: string): ParseResult | undefined {
     const arr = pep621Match[1] ?? '';
     for (const sm of arr.matchAll(/["']([^"']+)["']/g)) {
       const spec = sm[1] ?? '';
-      const parsed = /^([A-Za-z0-9_.\-]+)(?:\[[^\]]+\])?\s*([<>=!~]=?[^;,]+)?/.exec(spec);
+      const parsed = /^([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?\s*([<>=!~]=?[^;,]+)?/.exec(spec);
       if (!parsed) continue;
       const name = parsed[1];
       const ver = parsed[2];
@@ -268,7 +268,7 @@ export function parsePyprojectToml(content: string): ParseResult | undefined {
     for (const line of block.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
-      const kv = /^([A-Za-z0-9_.\-]+)\s*=\s*(.+)$/.exec(trimmed);
+      const kv = /^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/.exec(trimmed);
       if (!kv) continue;
       const name = kv[1];
       const rawVal = kv[2] ?? '';

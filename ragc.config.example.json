@@ -36,7 +36,7 @@
     "diversityPerFile": 3,
     "rerankerEnabled": true
   },
-  "projects": [
+  "repos": [
     {
       "name": "example-repo",
       "repo": "https://github.com/example/repo.git",
@@ -44,10 +44,18 @@
       "subPaths": ["src", "docs"]
     }
   ],
-  "files": [
+  "documents": [
     {
       "name": "spec-pdf",
       "path": "/absolute/path/to/spec.pdf"
+    }
+  ],
+  "sdlc": [
+    {
+      "name": "product-requirements",
+      "path": "/absolute/path/to/sdlc",
+      "source": "local",
+      "project": "example-repo"
     }
   ],
   "backup": {
