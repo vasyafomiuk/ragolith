@@ -217,6 +217,21 @@
               >
             </div>
           </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Traceability map</span>
+              <button type="button" id="analysis-run-trace" class="btn btn-ghost btn-sm">
+                Run
+              </button>
+            </h2>
+            <div id="analysis-trace-out" class="analysis-out">
+              <span class="muted small"
+                >Visualize SDLC artifacts and their links — requirements, code, tests, decisions.
+                Unlinked nodes are flagged.</span
+              >
+            </div>
+          </div>
         </section>
 
         <!-- Project detail -->
@@ -226,6 +241,37 @@
             <h1 id="project-title">project</h1>
             <p class="lead" id="project-meta"></p>
           </header>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Dependency map</span>
+              <span class="seg" role="group" aria-label="Graph granularity">
+                <button type="button" class="seg-btn active" data-grain="module">Modules</button>
+                <button type="button" class="seg-btn" data-grain="file">Files</button>
+              </span>
+            </h2>
+            <div id="project-graph"><span class="muted small">Loading…</span></div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">Call graph</h2>
+            <form id="callgraph-form" class="run-row">
+              <input
+                type="text"
+                id="callgraph-symbol"
+                placeholder="symbol name (e.g. checkout, PaymentService.charge)"
+                autocomplete="off"
+              />
+              <button type="submit" class="btn btn-ghost">Show callers + callees</button>
+            </form>
+            <div id="callgraph-out">
+              <span class="muted small"
+                >Enter a function/method name to see what calls it and what it calls.</span
+              >
+            </div>
+          </div>
+
+          <h2 class="section-h">Files</h2>
           <div class="card">
             <table id="project-files">
               <thead>

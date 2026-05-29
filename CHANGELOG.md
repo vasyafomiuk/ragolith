@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ## [Unreleased]
 
+### Added
+
+- **Visual graphs over indexed data.** A single reusable force-directed SVG renderer (deterministic, zero deps) now powers four views:
+  - **Service / dependency map on the project page** — open a project from Home and its module dependency graph renders automatically, with a **Modules / Files** granularity toggle (file-level aggregates call edges per file). No more digging into Analysis → Run.
+  - **Function call graph (ego)** — on the project page, enter a symbol to see its callers (incoming) and callees (outgoing) as a node-link graph, drawn from `CallEdge` across all eight languages. New `GET /api/callgraph` + `fetchCallEdges` core helper.
+  - **SDLC traceability map** (Analysis) — artifacts as nodes colored by kind, links as edges; code references shown as code nodes; untraced requirements and dangling links highlighted in red. Built from the indexed `links`.
+  - The existing decomposition graph now flows through the same renderer; `decompose` gained a `byFile` option (file-level dependency graph) surfaced via `?granularity=file`.
+
 ### Changed
 
 - **Dashboard simplified.** It had grown to 8 flat nav items with two separate search boxes and power-user controls on every view. Reworked for clarity:

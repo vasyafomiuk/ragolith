@@ -17,6 +17,7 @@ import type { WeaviateClient } from 'weaviate-client';
 import { configFilePath, loadConfig, resetConfigCache } from '../core/config.js';
 import {
   connect,
+  fetchCallEdges,
   fetchDecompositionInputs,
   getTechStack,
   listArtifacts,
@@ -252,11 +253,59 @@ export async function modernizationAnalysis(project?: string): Promise<Moderniza
 export async function decompositionAnalysis(
   project: string,
   depth?: number,
+  byFile?: boolean,
 ): Promise<DecompositionReport | { error: string }> {
   const client = await getClient();
   if (!client) return { error: 'Weaviate unreachable' };
   const inputs = await fetchDecompositionInputs(client, project);
-  return decomposeProject(project, inputs, { moduleDepth: depth ?? 1 });
+  return decomposeProject(project, inputs, {
+    moduleDepth: depth ?? 1,
+    ...(byFile ? { byFile } : {}),
+  });
+}
+
+export interface EgoCallGraph {
+  center: string;
+  matched: boolean;
+  callers: { name: string; count: number }[];
+  callees: { name: string; count: number }[];
+}
+
+/**
+ * Ego call graph for one symbol: who calls it (incoming) and what it calls
+ * (outgoing), 1 hop. `caller` is a fully-qualified symbol; `callee` is a
+ * simple name — so we match callers by exact OR last-segment equality, and
+ * callees by simple name.
+ */
+export async function egoCallGraph(project: string, symbol: string): Promise<EgoCallGraph> {
+  const empty: EgoCallGraph = { center: symbol, matched: false, callers: [], callees: [] };
+  const client = await getClient();
+  if (!client) return empty;
+  const edges = await fetchCallEdges(client, project);
+  const simple = symbol.includes('.') ? (symbol.split('.').pop() ?? symbol) : symbol;
+  const lastSeg = (s: string): string => (s.includes('.') ? (s.split('.').pop() ?? s) : s);
+
+  const callerCounts = new Map<string, number>();
+  const calleeCounts = new Map<string, number>();
+  let matched = false;
+  for (const e of edges) {
+    // Outgoing: this symbol is the caller.
+    if (e.caller === symbol || lastSeg(e.caller) === simple) {
+      matched = true;
+      calleeCounts.set(e.callee, (calleeCounts.get(e.callee) ?? 0) + 1);
+    }
+    // Incoming: this symbol is the callee.
+    if (e.callee === simple) {
+      matched = true;
+      callerCounts.set(e.caller, (callerCounts.get(e.caller) ?? 0) + 1);
+    }
+  }
+  const top = (m: Map<string, number>): { name: string; count: number }[] =>
+    [...m.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 40);
+  return { center: symbol, matched, callers: top(callerCounts), callees: top(calleeCounts) };
 }
 
 export interface DeleteProjectResult {

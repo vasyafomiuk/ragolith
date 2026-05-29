@@ -344,11 +344,26 @@ async function requestRowDelete(name, chunkCount) {
 
 // ----- project detail view --------------------------------------------------
 
+let currentProject = null;
+let currentGrain = 'module';
+
 async function renderProject(name) {
+  currentProject = name;
+  currentGrain = 'module';
   $('project-title').textContent = name;
   $('project-meta').textContent = 'Loading…';
   const body = $('project-body');
   body.innerHTML = '';
+  $('callgraph-out').innerHTML =
+    '<span class="muted small">Enter a function/method name to see what calls it and what it calls.</span>';
+  $('callgraph-symbol').value = '';
+  // Reset the granularity toggle to Modules.
+  document.querySelectorAll('#view-project .seg-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.grain === 'module');
+  });
+
+  void renderProjectGraph(name, 'module');
+
   try {
     const files = await api(`/api/projects/${encodeURIComponent(name)}/files`);
     if (files.length === 0) {
@@ -371,6 +386,103 @@ async function renderProject(name) {
   } catch (err) {
     $('project-meta').textContent = `Error: ${err.message}`;
   }
+}
+
+async function renderProjectGraph(name, grain) {
+  const out = $('project-graph');
+  out.innerHTML = '<span class="muted small">Building graph…</span>';
+  try {
+    const q = `?project=${encodeURIComponent(name)}${grain === 'file' ? '&granularity=file' : ''}`;
+    const r = await api('/api/analysis/decomposition' + q);
+    if (r.error) {
+      out.innerHTML = `<span class="muted small">${escape(r.error)}</span>`;
+      return;
+    }
+    if (!r.modules || r.modules.length < 2) {
+      out.innerHTML =
+        '<span class="muted small">Not enough call-graph data to draw a map (needs ≥2 linked ' +
+        (grain === 'file' ? 'files' : 'modules') +
+        ' — best for TS/JS, C#, Java, Python, Go, Rust, Ruby, PHP).</span>';
+      return;
+    }
+    out.innerHTML =
+      `<p class="muted small">${r.totals.modules} ${grain === 'file' ? 'files' : 'modules'} · ` +
+      `${r.totals.crossModuleCalls} cross-${grain === 'file' ? 'file' : 'module'} calls</p>` +
+      buildServiceGraph(r);
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
+  }
+}
+
+// Granularity toggle (Modules / Files) on the project page.
+document.querySelectorAll('#view-project .seg-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const grain = btn.dataset.grain;
+    if (grain === currentGrain || !currentProject) return;
+    currentGrain = grain;
+    document.querySelectorAll('#view-project .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    void renderProjectGraph(currentProject, grain);
+  });
+});
+
+// Ego call graph for a symbol within the current project.
+$('callgraph-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const symbol = $('callgraph-symbol').value.trim();
+  const out = $('callgraph-out');
+  if (!symbol || !currentProject) return;
+  out.innerHTML = '<span class="muted small">Building call graph…</span>';
+  try {
+    const r = await api(
+      `/api/callgraph?project=${encodeURIComponent(currentProject)}&symbol=${encodeURIComponent(symbol)}`,
+    );
+    if (!r.matched) {
+      out.innerHTML = `<span class="muted small">No call edges found for "${escape(symbol)}". Try a simple function/method name.</span>`;
+      return;
+    }
+    out.innerHTML = buildCallGraph(r);
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
+  }
+});
+
+// Ego call graph → nodes (center + callers + callees), edges (caller→center, center→callee).
+function buildCallGraph(ego) {
+  const center = ego.center;
+  const nodes = [{ id: `c:${center}`, label: center, r: 12, fill: 'var(--accent)', title: center }];
+  const edges = [];
+  for (const c of ego.callers) {
+    const id = `in:${c.name}`;
+    nodes.push({
+      id,
+      label: c.name,
+      r: 7 + Math.min(8, c.count * 1.5),
+      fill: 'var(--warn)',
+      title: `${c.name} → ${center} (${c.count})`,
+    });
+    edges.push({ s: id, t: `c:${center}`, w: c.count, title: `${c.name} calls ${center}` });
+  }
+  for (const c of ego.callees) {
+    const id = `out:${c.name}`;
+    nodes.push({
+      id,
+      label: c.name,
+      r: 7 + Math.min(8, c.count * 1.5),
+      fill: 'var(--ok)',
+      title: `${center} → ${c.name} (${c.count})`,
+    });
+    edges.push({ s: `c:${center}`, t: id, w: c.count, title: `${center} calls ${c.name}` });
+  }
+  return (
+    renderForceGraph(nodes, edges, { aria: 'call graph' }) +
+    legendHtml([
+      '<span><i class="dot" style="background:var(--accent)"></i>this symbol</span>',
+      '<span><i class="dot" style="background:var(--warn)"></i>callers (in)</span>',
+      '<span><i class="dot" style="background:var(--ok)"></i>callees (out)</span>',
+    ])
+  );
 }
 
 // ----- search view ----------------------------------------------------------
@@ -650,13 +762,131 @@ $('analysis-run-dec').addEventListener('click', async () => {
   }
 });
 
-// ----- service composition graph -------------------------------------------
+// ----- SDLC traceability graph ----------------------------------------------
+
+const REQ_KINDS = new Set(['requirement', 'story', 'feature', 'epic']);
+const ARTIFACT_KIND_COLOR = {
+  requirement: '#2563eb',
+  story: '#2563eb',
+  feature: '#2563eb',
+  epic: '#1d4ed8',
+  decision: '#7c3aed',
+  test_case: 'var(--ok)',
+  ticket: 'var(--warn)',
+  risk: 'var(--warn)',
+  incident: 'var(--bad)',
+};
+function artifactKindColor(kind) {
+  return ARTIFACT_KIND_COLOR[kind] || 'var(--text-faint)';
+}
+function isArtifactCodeRef(t) {
+  return /^(repo|symbol|file|code):/i.test(t);
+}
+
+$('analysis-run-trace').addEventListener('click', async () => {
+  const out = $('analysis-trace-out');
+  const project = $('analysis-project').value;
+  out.innerHTML = '<span class="muted small">Building map…</span>';
+  try {
+    const artifacts = await api(
+      '/api/sdlc/artifacts' + (project ? `?project=${encodeURIComponent(project)}` : ''),
+    );
+    if (!artifacts.length) {
+      out.innerHTML = '<span class="muted small">No SDLC artifacts indexed yet.</span>';
+      return;
+    }
+    out.innerHTML = buildTraceabilityGraph(artifacts);
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
+  }
+});
+
+function buildTraceabilityGraph(artifacts) {
+  const CAP = 120;
+  const capped = artifacts.length > CAP;
+  const list = artifacts.slice(0, CAP);
+  const known = new Set(list.map((a) => a.artifact_id));
+
+  const nodes = new Map(); // id → node
+  const edges = [];
+  const indeg = new Map();
+  const bump = (id) => indeg.set(id, (indeg.get(id) ?? 0) + 1);
+
+  for (const a of list) {
+    nodes.set(a.artifact_id, {
+      id: a.artifact_id,
+      label: a.artifact_id,
+      r: 9,
+      fill: artifactKindColor(a.kind),
+      title: `[${a.kind}] ${a.artifact_id} — ${a.title}`,
+      _kind: a.kind,
+      _links: (a.links || []).length,
+    });
+  }
+  for (const a of list) {
+    for (const link of a.links || []) {
+      const target = link.target;
+      if (isArtifactCodeRef(target)) {
+        if (!nodes.has(target)) {
+          nodes.set(target, {
+            id: target,
+            label: target.replace(/^[a-z]+:/i, ''),
+            r: 6,
+            fill: 'var(--accent)',
+            title: target,
+          });
+        }
+      } else if (!nodes.has(target)) {
+        // Dangling — referenced but not indexed.
+        nodes.set(target, {
+          id: target,
+          label: target,
+          r: 7,
+          fill: 'var(--bad)',
+          ring: 'var(--bad)',
+          title: `${target} — referenced but not indexed (dangling)`,
+        });
+      }
+      edges.push({ s: a.artifact_id, t: target, title: `${a.artifact_id} ${link.rel} ${target}` });
+      bump(target);
+    }
+  }
+  // Flag requirement-ish nodes with no links in or out as likely-untraced.
+  for (const n of nodes.values()) {
+    if (REQ_KINDS.has(n._kind) && n._links === 0 && (indeg.get(n.id) ?? 0) === 0) {
+      n.ring = 'var(--bad)';
+      n.title += ' · untraced (no links)';
+    }
+  }
+
+  const nodeArr = [...nodes.values()];
+  if (nodeArr.length < 2) {
+    return '<span class="muted small">Not enough linked artifacts to draw a map. Add <code>links</code> to your RSIF artifacts.</span>';
+  }
+  return (
+    (capped
+      ? `<p class="muted small">Showing first ${CAP} of ${artifacts.length} artifacts.</p>`
+      : '') +
+    renderForceGraph(nodeArr, edges, { aria: 'SDLC traceability graph', height: 480 }) +
+    legendHtml([
+      '<span><i class="dot" style="background:#2563eb"></i>requirement</span>',
+      '<span><i class="dot" style="background:#7c3aed"></i>decision</span>',
+      '<span><i class="dot" style="background:var(--ok)"></i>test</span>',
+      '<span><i class="dot" style="background:var(--accent)"></i>code</span>',
+      '<span><i class="ring" style="border-color:var(--bad)"></i>untraced / dangling</span>',
+    ])
+  );
+}
+
+// ----- generic force-directed graph ----------------------------------------
 //
-// A dependency-light, deterministic force-directed SVG of the module graph:
-// nodes = modules (radius ∝ file count, fill ∝ cohesion, ring = seam), edges =
-// cross-module couplings (width ∝ call volume). Layout is a fixed-iteration
-// spring simulation seeded on a circle, so it's stable across renders without
-// any animation loop or library.
+// One renderer for every graph in the dashboard (service composition, SDLC
+// traceability, ego call graph, file-level deps). Dependency-light and
+// deterministic: a fixed-iteration spring simulation seeded on a circle, no
+// animation loop, no library.
+//
+//   nodes: [{ id, label, r?, fill?, ring?, title? }]
+//   edges: [{ s, t, w?, title? }]    (s/t are node ids)
 
 function cohesionColor(c) {
   if (c >= 0.66) return 'var(--ok)';
@@ -664,112 +894,136 @@ function cohesionColor(c) {
   return 'var(--bad)';
 }
 
-function buildServiceGraph(report) {
-  const W = 640;
-  const H = 440;
-  const pad = 44;
-  const nodes = report.modules.map((m) => ({ ...m, x: 0, y: 0, vx: 0, vy: 0 }));
-  if (nodes.length < 2) {
-    return '<p class="muted small">Graph needs at least 2 modules with call edges.</p>';
+function renderForceGraph(nodes, edges, opts = {}) {
+  const W = opts.width ?? 640;
+  const H = opts.height ?? 440;
+  const pad = 46;
+  if (nodes.length === 0) {
+    return `<p class="muted small">${escape(opts.empty ?? 'Nothing to graph.')}</p>`;
   }
-  const idx = new Map(nodes.map((n, i) => [n.module, i]));
-  const edges = report.couplings
-    .map((c) => ({ s: idx.get(c.a), t: idx.get(c.b), w: c.calls }))
-    .filter((e) => e.s !== undefined && e.t !== undefined);
+  const idx = new Map(nodes.map((n, i) => [n.id, i]));
+  const E = edges
+    .map((e) => ({ s: idx.get(e.s), t: idx.get(e.t), w: e.w ?? 1, title: e.title }))
+    .filter((e) => e.s !== undefined && e.t !== undefined && e.s !== e.t);
 
+  const P = nodes.map(() => ({ x: 0, y: 0, vx: 0, vy: 0 }));
   const cx = W / 2;
   const cy = H / 2;
   const R = Math.min(W, H) / 2 - pad;
-  nodes.forEach((n, i) => {
+  P.forEach((p, i) => {
     const a = (2 * Math.PI * i) / nodes.length;
-    n.x = cx + R * Math.cos(a);
-    n.y = cy + R * Math.sin(a);
+    p.x = cx + R * Math.cos(a);
+    p.y = cy + R * Math.sin(a);
   });
 
-  // Fixed-iteration spring layout (deterministic; circle seed, no RNG).
-  for (let it = 0; it < 320; it++) {
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        let dx = nodes[i].x - nodes[j].x;
-        let dy = nodes[i].y - nodes[j].y;
+  const iters = opts.iterations ?? 320;
+  for (let it = 0; it < iters; it++) {
+    for (let i = 0; i < P.length; i++) {
+      for (let j = i + 1; j < P.length; j++) {
+        let dx = P[i].x - P[j].x;
+        let dy = P[i].y - P[j].y;
         const d2 = dx * dx + dy * dy || 0.01;
         const d = Math.sqrt(d2);
         const rep = 2400 / d2;
         dx = (dx / d) * rep;
         dy = (dy / d) * rep;
-        nodes[i].vx += dx;
-        nodes[i].vy += dy;
-        nodes[j].vx -= dx;
-        nodes[j].vy -= dy;
+        P[i].vx += dx;
+        P[i].vy += dy;
+        P[j].vx -= dx;
+        P[j].vy -= dy;
       }
     }
-    for (const e of edges) {
-      const a = nodes[e.s];
-      const b = nodes[e.t];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
+    for (const e of E) {
+      const a = P[e.s];
+      const b = P[e.t];
       const k = 0.02 * Math.min(4, e.w);
-      a.vx += dx * k;
-      a.vy += dy * k;
-      b.vx -= dx * k;
-      b.vy -= dy * k;
+      a.vx += (b.x - a.x) * k;
+      a.vy += (b.y - a.y) * k;
+      b.vx -= (b.x - a.x) * k;
+      b.vy -= (b.y - a.y) * k;
     }
-    for (const n of nodes) {
-      n.vx += (cx - n.x) * 0.006;
-      n.vy += (cy - n.y) * 0.006;
-      n.x += n.vx * 0.85;
-      n.y += n.vy * 0.85;
-      n.vx *= 0.82;
-      n.vy *= 0.82;
-      n.x = Math.max(pad, Math.min(W - pad, n.x));
-      n.y = Math.max(pad, Math.min(H - pad, n.y));
+    for (const p of P) {
+      p.vx += (cx - p.x) * 0.006;
+      p.vy += (cy - p.y) * 0.006;
+      p.x += p.vx * 0.85;
+      p.y += p.vy * 0.85;
+      p.vx *= 0.82;
+      p.vy *= 0.82;
+      p.x = Math.max(pad, Math.min(W - pad, p.x));
+      p.y = Math.max(pad, Math.min(H - pad, p.y));
     }
   }
 
-  const seamSet = new Set(report.seams.map((s) => s.module));
-  const radius = (m) => 7 + Math.min(16, Math.sqrt(m.files || 1) * 2.4);
-
-  const edgeSvg = edges
-    .map((e) => {
-      const a = nodes[e.s];
-      const b = nodes[e.t];
-      const sw = 1 + Math.min(5, Math.log2(e.w + 1));
-      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke-width="${sw.toFixed(2)}" class="svc-edge"><title>${escape(a.module)} ↔ ${escape(b.module)}: ${e.w} calls</title></line>`;
-    })
-    .join('');
+  const edgeSvg = E.map((e) => {
+    const a = P[e.s];
+    const b = P[e.t];
+    const sw = 1 + Math.min(5, Math.log2(e.w + 1));
+    return (
+      `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" ` +
+      `stroke-width="${sw.toFixed(2)}" class="svc-edge">${e.title ? `<title>${escape(e.title)}</title>` : ''}</line>`
+    );
+  }).join('');
 
   const nodeSvg = nodes
-    .map((n) => {
-      const r = radius(n);
-      const ring = seamSet.has(n.module)
-        ? ` stroke="var(--accent)" stroke-width="2.5"`
+    .map((n, i) => {
+      const p = P[i];
+      const r = n.r ?? 9;
+      const ring = n.ring
+        ? ` stroke="${n.ring}" stroke-width="2.5"`
         : ' stroke="#fff" stroke-width="1.5"';
-      const label = n.module.length > 16 ? n.module.slice(0, 15) + '…' : n.module;
+      const raw = n.label ?? n.id ?? '';
+      const label = raw.length > 18 ? raw.slice(0, 17) + '…' : raw;
       return (
-        `<g class="svc-node">` +
-        `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${cohesionColor(n.cohesion)}"${ring}>` +
-        `<title>${escape(n.module)} — ${n.files} files, cohesion ${n.cohesion.toFixed(2)}, instability ${n.instability.toFixed(2)}${seamSet.has(n.module) ? ' · suggested seam' : ''}</title></circle>` +
-        `<text x="${n.x.toFixed(1)}" y="${(n.y + r + 11).toFixed(1)}" class="svc-label">${escape(label)}</text>` +
-        `</g>`
+        '<g class="svc-node">' +
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${n.fill ?? 'var(--accent)'}"${ring}>` +
+        `${n.title ? `<title>${escape(n.title)}</title>` : ''}</circle>` +
+        `<text x="${p.x.toFixed(1)}" y="${(p.y + r + 11).toFixed(1)}" class="svc-label">${escape(label)}</text>` +
+        '</g>'
       );
     })
     .join('');
 
-  const legend =
-    '<div class="svc-legend">' +
-    '<span><i class="dot" style="background:var(--ok)"></i>cohesive</span>' +
-    '<span><i class="dot" style="background:var(--warn)"></i>mixed</span>' +
-    '<span><i class="dot" style="background:var(--bad)"></i>coupling-heavy</span>' +
-    '<span><i class="ring"></i>suggested seam</span>' +
-    '<span class="muted">node size = files · edge width = call volume</span>' +
-    '</div>';
-
   return (
-    `<div class="svc-graph"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="service composition graph">` +
+    `<div class="svc-graph"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escape(opts.aria ?? 'graph')}">` +
     edgeSvg +
     nodeSvg +
-    '</svg></div>' +
-    legend
+    '</svg></div>'
+  );
+}
+
+function legendHtml(items) {
+  return '<div class="svc-legend">' + items.join('') + '</div>';
+}
+
+// Service composition graph — modules sized by files, colored by cohesion.
+function buildServiceGraph(report) {
+  if (report.modules.length < 2) {
+    return '<p class="muted small">Graph needs at least 2 modules with call edges.</p>';
+  }
+  const seamSet = new Set(report.seams.map((s) => s.module));
+  const nodes = report.modules.map((m) => ({
+    id: m.module,
+    label: m.module,
+    r: 7 + Math.min(16, Math.sqrt(m.files || 1) * 2.4),
+    fill: cohesionColor(m.cohesion),
+    ring: seamSet.has(m.module) ? 'var(--accent)' : null,
+    title: `${m.module} — ${m.files} files, cohesion ${m.cohesion.toFixed(2)}, instability ${m.instability.toFixed(2)}${seamSet.has(m.module) ? ' · suggested seam' : ''}`,
+  }));
+  const edges = report.couplings.map((c) => ({
+    s: c.a,
+    t: c.b,
+    w: c.calls,
+    title: `${c.a} ↔ ${c.b}: ${c.calls} calls`,
+  }));
+  return (
+    renderForceGraph(nodes, edges, { aria: 'service composition graph' }) +
+    legendHtml([
+      '<span><i class="dot" style="background:var(--ok)"></i>cohesive</span>',
+      '<span><i class="dot" style="background:var(--warn)"></i>mixed</span>',
+      '<span><i class="dot" style="background:var(--bad)"></i>coupling-heavy</span>',
+      '<span><i class="ring"></i>suggested seam</span>',
+      '<span class="muted">node size = files · edge width = call volume</span>',
+    ])
   );
 }
 

@@ -35,6 +35,7 @@ import { spawn } from 'node:child_process';
 import {
   decompositionAnalysis,
   deleteProject,
+  egoCallGraph,
   gapAnalysis,
   getActiveJob,
   health,
@@ -201,7 +202,20 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         }
         const depthRaw = params.get('depth');
         const depth = depthRaw ? Math.max(1, Number.parseInt(depthRaw, 10) || 1) : undefined;
-        sendJson(res, 200, await decompositionAnalysis(project, depth));
+        const byFile = params.get('granularity') === 'file';
+        sendJson(res, 200, await decompositionAnalysis(project, depth, byFile));
+        return;
+      }
+      const callGraphMatch = /^\/api\/callgraph(\?.*)?$/.exec(url);
+      if (method === 'GET' && callGraphMatch) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        const project = params.get('project');
+        const symbol = params.get('symbol');
+        if (!project || !symbol) {
+          sendJson(res, 400, { error: 'callgraph requires ?project=<name>&symbol=<name>' });
+          return;
+        }
+        sendJson(res, 200, await egoCallGraph(project, symbol));
         return;
       }
       if (method === 'GET' && url === '/api/config') {

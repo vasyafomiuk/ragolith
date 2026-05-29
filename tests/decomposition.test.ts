@@ -31,6 +31,11 @@ describe('moduleOf', () => {
     assert.equal(moduleOf('src/auth/oauth/login.ts', { moduleDepth: 2 }), 'auth/oauth');
   });
 
+  it('byFile returns the whole normalized path (file-level graph)', () => {
+    assert.equal(moduleOf('src/auth/login.ts', { byFile: true }), 'src/auth/login.ts');
+    assert.equal(moduleOf('.\\src\\a.ts', { byFile: true }), 'src/a.ts');
+  });
+
   it('keeps unstripped roots (monorepo packages)', () => {
     assert.equal(moduleOf('packages/api/src/x.ts'), 'packages');
     assert.equal(moduleOf('packages/api/src/x.ts', { moduleDepth: 2 }), 'packages/api');

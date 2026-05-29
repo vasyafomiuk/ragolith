@@ -440,6 +440,37 @@ export async function fetchDecompositionInputs(
   };
 }
 
+export interface CallEdgeRow {
+  caller: string;
+  callee: string;
+  call_type: string;
+  file: string;
+  line: number;
+}
+
+/** Fetch all call edges for a project (full rows). Powers ego call graphs. */
+export async function fetchCallEdges(
+  client: WeaviateClient,
+  project: string,
+): Promise<CallEdgeRow[]> {
+  const col = client.collections.get(CALL_EDGE);
+  const res = await col.query.fetchObjects({
+    filters: col.filter.byProperty('project').equal(project),
+    limit: 10000,
+    returnProperties: ['caller', 'callee', 'call_type', 'file', 'line'],
+  });
+  return res.objects.map((o) => {
+    const p = o.properties as Record<string, unknown>;
+    return {
+      caller: String(p['caller'] ?? ''),
+      callee: String(p['callee'] ?? ''),
+      call_type: String(p['call_type'] ?? ''),
+      file: String(p['file'] ?? ''),
+      line: Number(p['line'] ?? 0),
+    };
+  });
+}
+
 /** Read every detected project tech stack. Used by modernization analysis. */
 export async function listProjectStacks(client: WeaviateClient): Promise<TechStack[]> {
   const col = client.collections.get(PROJECT_STACK);

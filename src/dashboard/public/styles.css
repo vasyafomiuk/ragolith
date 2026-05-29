@@ -1133,3 +1133,29 @@ details.advanced.card.section > summary {
 .hits .hit-group:first-child {
   margin-top: 0;
 }
+
+/* ---------- Segmented toggle (graph granularity) ---------- */
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.seg-btn {
+  border: 0;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+.seg-btn.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 600;
+}
