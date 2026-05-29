@@ -13,17 +13,59 @@
 
 # ragolith
 
-A RAG pipeline that indexes git repositories and documents into Weaviate, then exposes semantic search to LLM clients via **MCP (Model Context Protocol)** over stdio.
+A **tool-agnostic SDLC knowledge platform**: index everything across the software-development lifecycle — code, requirements, design decisions (ADRs), tickets, tests, runbooks, API specs — into Weaviate, then search it semantically, find traceability gaps, and plan modernization and monolith→microservices migrations. Exposed to any LLM client via **MCP (Model Context Protocol)** over stdio, plus CLIs and a localhost dashboard.
 
 ## What it does
 
-- **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate.
-- **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter.
-- **Serve** — an MCP server over stdio that exposes ~11 tools (search, find symbol, file structure, callers/callees, tech stack, etc.) for any MCP-aware LLM client.
+- **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate. Also ingests **SDLC artifacts** from a portable interchange format (see below).
+- **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter — over both code and SDLC artifacts.
+- **Analyze** — `ragolith-analyze` finds **traceability gaps** (unimplemented requirements, untested code, orphan tests, dangling links), flags **modernization** targets (end-of-life runtimes + frameworks), and suggests **microservice seams** for monolith decomposition.
+- **Serve** — an MCP server over stdio exposing 17 tools (search, find symbol, callers/callees, tech stack, search_sdlc, list/get artifact, analyze_gaps, analyze_modernization, analyze_decomposition, …) for any MCP-aware LLM client.
 - **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, edit `ragc.config.json`, kick off ingest/backup jobs with live progress, and check stack health.
 - **Backup** — Weaviate filesystem backups with optional S3 push/pull.
 
-All embeddings and reranking run locally in Docker — no external API keys needed.
+Tool-agnostic by design: ragolith never calls Jira/Confluence/Linear/GitHub APIs. Any tool exports to **RSIF** (the Ragolith SDLC Interchange Format) and ragolith indexes that. All embeddings and reranking run locally in Docker — no external API keys needed.
+
+## SDLC artifacts (RSIF)
+
+Point ragolith at a directory of SDLC artifacts via the `sdlc` config section. Two portable encodings, both decoding to the same artifact shape:
+
+- **Markdown + YAML frontmatter** (`.md`) — human- and git-friendly, one artifact per file:
+
+  ```markdown
+  ---
+  id: REQ-001
+  kind: requirement
+  title: Users can reset their password via email
+  status: done
+  tags: [auth, security]
+  links:
+    - rel: implemented_by
+      target: repo:webapp/src/auth/reset.ts
+    - rel: tested_by
+      target: TC-12
+  ---
+
+  As a registered user, I want to reset my password through an emailed link…
+  ```
+
+- **NDJSON / JSONL / JSON array** — lossless, machine-friendly bulk export (one artifact object per line).
+
+`kind` is folded to a canonical vocabulary (requirement, story, epic, feature, decision, ticket, risk, test_case, runbook, api_spec, design_doc, meeting_note, incident, other) with aliases (`adr`→decision, `bug`→ticket, `openapi`→api_spec, …). `links` use a relationship vocabulary (`implements`, `implemented_by`, `tests`, `tested_by`, `depends_on`, `supersedes`, …) where targets are other artifact ids or code references (`repo:`/`symbol:`/`file:`). Those links are what gap analysis traverses. Write an adapter to convert any vendor export into RSIF — the format is the only integration contract.
+
+## Analysis
+
+```bash
+ragolith-analyze gaps        # traceability holes across the SDLC graph
+ragolith-analyze modernize   # end-of-life / legacy runtimes + frameworks
+ragolith-analyze decompose --project <p>   # suggested microservice seams
+```
+
+- **gaps** — unimplemented requirements (high), implemented-but-untested (warning), accepted-but-unbuilt decisions, orphan tests, and dangling links. `--strict` exits non-zero on any high-severity gap, so it can gate CI.
+- **modernize** — checks detected runtimes (Java 8, Node 16, Python 2, …) and frameworks (Spring Boot 2.x, AngularJS, Vue 2, legacy `javax.*` Java EE, …) against a curated knowledge table, each with an upgrade recommendation.
+- **decompose** — builds a module dependency graph from call edges and reports per-module cohesion + Martin instability + fan-in/out, ranks the tightest cross-module couplings (migration friction), and suggests cohesive, loosely-coupled modules to extract first.
+
+Each subcommand has a `--json` mode and a matching MCP tool (`analyze_gaps`, `analyze_modernization`, `analyze_decomposition`).
 
 ## Architecture
 
@@ -56,10 +98,13 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 | Component        | File                                  | Role                                                                                                           |
 | ---------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| MCP Server       | `src/mcp/server.ts`                   | 11 search/structure tools exposed to LLM clients                                                               |
+| MCP Server       | `src/mcp/server.ts`                   | 17 search / structure / SDLC / analysis tools exposed to LLM clients                                           |
 | Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health                                            |
 | Manifest Scanner | `src/core/manifest-scan.ts`           | Detects frameworks + runtime versions from package.json / pom.xml / gradle / pyproject / requirements / csproj |
-| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                                                          |
+| Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes code + SDLC artifacts to Weaviate                                    |
+| Analyze CLI      | `src/cli/analyze.ts`                  | gaps / modernize / decompose analyses over the SDLC + code graph                                               |
+| RSIF Parser      | `src/core/sdlc.ts`                    | Parses the SDLC interchange format (Markdown+frontmatter, NDJSON, JSON)                                        |
+| Analysis         | `src/core/analysis/`                  | Pure gap / modernization / decomposition engines                                                               |
 | Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                                                         |
 | AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges                                      |
 | Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records                                |
@@ -79,7 +124,8 @@ All embeddings and reranking run locally in Docker — no external API keys need
 - **CodeChunk** — vectorized code/doc chunks with `file_path`, `project`, `lines`, `language`, `chunk_type`.
 - **SymbolRecord** — function/class/method index with `name`, `kind`, `signature`, `parent`, `exports`.
 - **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line` (TS/JS only).
-- **ProjectStack** — one row per project: detected `languages[]`, `build_tools[]`, `framework_names[]`, plus rich `frameworks_json` / `runtimes_json` / `manifests_json` blobs. Powers the `tech_stack` MCP tool.
+- **ProjectStack** — one row per project: detected `languages[]`, `build_tools[]`, `framework_names[]`, plus rich `frameworks_json` / `runtimes_json` / `manifests_json` blobs. Powers the `tech_stack` MCP tool and modernization analysis.
+- **SdlcArtifact** — vectorized SDLC artifacts (requirements, decisions, tickets, tests, …) with `artifact_id`, `kind`, `title`, `status`, `source`, `project`, `tags`, `links_json` + denormalized `link_rels`/`link_targets` facets. Powers `search_sdlc` and gap analysis.
 
 ## Search pipeline
 
@@ -120,7 +166,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 npm install -g ragolith
 ```
 
-This puts seven CLIs on your PATH: `ragolith-init`, `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`, `ragolith-doctor`, `ragolith-eval`. No source clone needed.
+This puts eight CLIs on your PATH: `ragolith-init`, `ragolith-server`, `ragolith-ingest`, `ragolith-backup`, `ragolith-dashboard`, `ragolith-doctor`, `ragolith-eval`, `ragolith-analyze`. No source clone needed.
 
 ### From source
 
@@ -259,7 +305,13 @@ VS Code Command Palette → "Cline: Open MCP Settings", which opens `~/.cline/mc
 
 ### Smoke-testing without a client
 
-Once wired, you can call any of the 10 tools (`search`, `find_symbol`, `file_structure`, `read_chunk`, `callers_of`, `callees_of`, `list_projects`, `list_files`, `search_code`, `search_docs`) directly through the client's tool UI. The integration test in [`tests/integration/end-to-end.test.ts`](tests/integration/end-to-end.test.ts) shows the same calls made programmatically with the MCP SDK.
+Once wired, you can call any of the 17 tools through the client's tool UI:
+
+- **Code & docs**: `search`, `search_code`, `search_docs`, `find_symbol`, `file_structure`, `read_chunk`, `callers_of`, `callees_of`, `list_projects`, `list_files`, `tech_stack`
+- **SDLC artifacts**: `search_sdlc`, `list_artifacts`, `get_artifact`
+- **Analysis**: `analyze_gaps`, `analyze_modernization`, `analyze_decomposition`
+
+The integration test in [`tests/integration/end-to-end.test.ts`](tests/integration/end-to-end.test.ts) shows the same calls made programmatically with the MCP SDK.
 
 ## Dashboard
 
