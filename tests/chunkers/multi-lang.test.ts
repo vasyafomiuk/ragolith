@@ -172,3 +172,58 @@ class Greeter {
     assert.equal(greet.parent, 'Demo.Greeter');
   });
 });
+
+describe('call edges — all tree-sitter languages', () => {
+  const cases = [
+    {
+      lang: 'python',
+      file: 'a.py',
+      src: 'class O:\n    def place(self, total):\n        self.pay.charge(total)\n        notify("u")\n',
+    },
+    {
+      lang: 'go',
+      file: 'a.go',
+      src: 'func place(total int) {\n\tpay.charge(total)\n\tnotify("u")\n}',
+    },
+    {
+      lang: 'rust',
+      file: 'a.rs',
+      src: 'fn place(total: i32) {\n    pay.charge(total);\n    notify("u");\n}',
+    },
+    {
+      lang: 'ruby',
+      file: 'a.rb',
+      src: 'def place(total)\n  pay.charge(total)\n  notify("u")\nend',
+    },
+    {
+      lang: 'php',
+      file: 'a.php',
+      src: '<?php\nfunction place($total) {\n  $pay->charge($total);\n  notify("u");\n}',
+    },
+  ];
+
+  for (const c of cases) {
+    it(`${c.lang}: emits caller→callee edges (member + bare)`, async () => {
+      const r = await pickChunker({
+        content: c.src,
+        filePath: c.file,
+        project: 'p',
+        language: c.lang as never,
+      });
+      const callees = r.edges.map((e) => e.callee);
+      assert.ok(
+        callees.includes('charge'),
+        `${c.lang}: expected charge in ${JSON.stringify(callees)}`,
+      );
+      assert.ok(
+        callees.includes('notify'),
+        `${c.lang}: expected notify in ${JSON.stringify(callees)}`,
+      );
+      assert.equal(
+        r.edges.find((e) => e.callee === 'charge')!.call_type,
+        'method',
+        `${c.lang}: charge should be a member call`,
+      );
+    });
+  }
+});

@@ -109,7 +109,7 @@ Each subcommand has a `--json` mode and a matching MCP tool (`analyze_gaps`, `an
 | AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges                                      |
 | Java Chunker     | `src/core/chunkers/java-chunker.ts`   | tree-sitter via web-tree-sitter; annotations, generics, nested classes, records                                |
 | C# Chunker       | `src/core/chunkers/csharp-chunker.ts` | tree-sitter via web-tree-sitter; attributes, file-scoped namespaces, records                                   |
-| Other Chunkers   | `src/core/chunkers/tree-sitter.ts`    | Python, Go, Rust, Ruby, PHP — all via tree-sitter                                                              |
+| Other Chunkers   | `src/core/chunkers/tree-sitter.ts`    | Java, C#, Python, Go, Rust, Ruby, PHP — symbols + call edges via tree-sitter                                   |
 | SQL Chunker      | `src/core/chunkers/sql-chunker.ts`    | Statement-boundary splitting                                                                                   |
 | Fallback Chunker | `src/core/chunkers/chunker.ts`        | Line-based (~4000 chars, 4-line overlap)                                                                       |
 | Dispatch         | `src/core/chunkers/dispatch.ts`       | Picks the right chunker per language                                                                           |
@@ -123,7 +123,7 @@ Each subcommand has a `--json` mode and a matching MCP tool (`analyze_gaps`, `an
 
 - **CodeChunk** — vectorized code/doc chunks with `file_path`, `project`, `lines`, `language`, `chunk_type`.
 - **SymbolRecord** — function/class/method index with `name`, `kind`, `signature`, `parent`, `exports`.
-- **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line` (TS/JS, C#, and Java). Powers `callers_of`/`callees_of` and the decomposition graph.
+- **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line`. Extracted for **every chunked language** (TS/JS, C#, Java, Python, Go, Rust, Ruby, PHP). Powers `callers_of`/`callees_of` and the decomposition graph.
 - **ProjectStack** — one row per project: detected `languages[]`, `build_tools[]`, `framework_names[]`, plus rich `frameworks_json` / `runtimes_json` / `manifests_json` blobs. Powers the `tech_stack` MCP tool and modernization analysis.
 - **SdlcArtifact** — vectorized SDLC artifacts (requirements, decisions, tickets, tests, …) with `artifact_id`, `kind`, `title`, `status`, `source`, `project`, `tags`, `links_json` + denormalized `link_rels`/`link_targets` facets. Powers `search_sdlc` and gap analysis.
 

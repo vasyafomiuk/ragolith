@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ### Added
 
+- **Call edges for every chunked language** — Python, Go, Rust, Ruby, and PHP now emit `caller → callee` edges from the tree-sitter walker (joining TS/JS, C#, Java), so `callers_of`/`callees_of` and the **decomposition / service-composition graph** work for all eight languages. Per-grammar callee extraction (Python `attribute`, Go `selector_expression`, Rust `field_expression`/`scoped_identifier`/`macro_invocation`, Ruby receiver-method, PHP member/scoped calls), verified empirically against each grammar and covered by a per-language edge test. Member calls tag `call_type: 'method'`, bare calls `'static'`.
 - **C# / .NET native-app support deepened**:
 
   - **Call edges for C# and Java** — the tree-sitter walker now extracts `caller → callee` edges from method/invocation bodies, so `callers_of`, `callees_of`, and the **decomposition / service-composition graph** work on C# and Java repos (previously TS/JS only).

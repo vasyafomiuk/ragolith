@@ -122,6 +122,92 @@ function javaCallee(call: Node): { name: string; viaMember: boolean } | undefine
   return { name, viaMember: !!call.childForFieldName('object') };
 }
 
+/** Rightmost named child whose type is in `types` — its text, or undefined. */
+function lastChildText(node: Node, types: Set<string>): string | undefined {
+  for (let i = node.namedChildren.length - 1; i >= 0; i--) {
+    const c = node.namedChildren[i];
+    if (c && types.has(c.type)) return c.text;
+  }
+  return undefined;
+}
+
+/** Last segment of a scoped/qualified name (`a::b::c`, `A\B\c`). */
+function lastSegment(text: string): string | undefined {
+  const seg = text.split(/::|\\/).pop()?.trim();
+  return seg || undefined;
+}
+
+const PY_ID = new Set(['identifier']);
+/** Python `call` → `identifier` or `attribute` (obj.method). */
+function pythonCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  const callee = call.namedChildren[0];
+  if (!callee) return undefined;
+  if (callee.type === 'attribute') {
+    const name = lastChildText(callee, PY_ID);
+    return name ? { name, viaMember: true } : undefined;
+  }
+  if (callee.type === 'identifier') return { name: callee.text, viaMember: false };
+  return undefined;
+}
+
+const GO_ID = new Set(['identifier', 'field_identifier', 'type_identifier']);
+/** Go `call_expression` → `identifier` or `selector_expression` (pkg/recv.Fn). */
+function goCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  const callee = call.namedChildren[0];
+  if (!callee) return undefined;
+  if (callee.type === 'selector_expression') {
+    const name = lastChildText(callee, GO_ID);
+    return name ? { name, viaMember: true } : undefined;
+  }
+  if (callee.type === 'identifier') return { name: callee.text, viaMember: false };
+  return undefined;
+}
+
+const RUST_ID = new Set(['identifier', 'field_identifier', 'type_identifier']);
+/** Rust `call_expression` (fn/method/assoc) + `macro_invocation`. */
+function rustCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  if (call.type === 'macro_invocation') {
+    const name = lastChildText(call, RUST_ID);
+    return name ? { name, viaMember: false } : undefined;
+  }
+  const callee = call.namedChildren[0];
+  if (!callee) return undefined;
+  if (callee.type === 'field_expression') {
+    const name = lastChildText(callee, RUST_ID);
+    return name ? { name, viaMember: true } : undefined;
+  }
+  if (callee.type === 'scoped_identifier') {
+    const name = lastChildText(callee, RUST_ID) ?? lastSegment(callee.text);
+    return name ? { name, viaMember: false } : undefined;
+  }
+  if (callee.type === 'identifier') return { name: callee.text, viaMember: false };
+  return undefined;
+}
+
+/** Ruby `call` — `[recv?, method, args]`; method is the last identifier child. */
+function rubyCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  const idents = call.namedChildren.filter((c): c is Node => !!c && c.type === 'identifier');
+  const last = idents[idents.length - 1];
+  if (!last) return undefined;
+  return { name: last.text, viaMember: idents.length > 1 };
+}
+
+const PHP_NAME = new Set(['name']);
+/** PHP function / member / scoped / nullsafe call expressions. */
+function phpCallee(call: Node): { name: string; viaMember: boolean } | undefined {
+  if (call.type === 'function_call_expression') {
+    const fn = call.namedChildren.find(
+      (c): c is Node => !!c && (c.type === 'name' || c.type === 'qualified_name'),
+    );
+    if (!fn) return undefined;
+    const name = fn.type === 'qualified_name' ? lastSegment(fn.text) : fn.text;
+    return name ? { name, viaMember: false } : undefined;
+  }
+  // member_call / scoped_call / nullsafe — the method is the rightmost `name`.
+  const name = lastChildText(call, PHP_NAME);
+  return name ? { name, viaMember: true } : undefined;
+}
+
 const containerKindGeneric = (type: string): SymbolKind => {
   if (type.includes('interface')) return 'interface';
   if (type.includes('enum')) return 'enum';
@@ -168,6 +254,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(['function_definition']),
     namespaces: new Set(),
     containerKind: () => 'class',
+    calls: { types: new Set(['call']), extract: pythonCallee },
   },
   go: {
     // type_spec is the inner declaration inside type_declaration. Using it as
@@ -177,6 +264,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(['function_declaration']),
     namespaces: new Set(),
     containerKind: () => 'class',
+    calls: { types: new Set(['call_expression']), extract: goCallee },
   },
   rust: {
     containers: new Set([
@@ -196,6 +284,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
       if (type === 'mod_item') return 'namespace';
       return 'class';
     },
+    calls: { types: new Set(['call_expression', 'macro_invocation']), extract: rustCallee },
   },
   ruby: {
     containers: new Set(['class', 'module', 'singleton_class']),
@@ -203,6 +292,7 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(),
     namespaces: new Set(),
     containerKind: (type) => (type === 'module' ? 'namespace' : 'class'),
+    calls: { types: new Set(['call']), extract: rubyCallee },
   },
   php: {
     containers: new Set([
@@ -215,6 +305,15 @@ const GRAMMARS: Record<GrammarName, TypeSets> = {
     functions: new Set(['function_definition']),
     namespaces: new Set(['namespace_definition']),
     containerKind: containerKindGeneric,
+    calls: {
+      types: new Set([
+        'function_call_expression',
+        'member_call_expression',
+        'scoped_call_expression',
+        'nullsafe_member_call_expression',
+      ]),
+      extract: phpCallee,
+    },
   },
 };
 
