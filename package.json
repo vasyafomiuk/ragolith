@@ -51,7 +51,8 @@
     "ragolith-dashboard": "./dist/dashboard/server.js",
     "ragolith-init": "./dist/cli/init.js",
     "ragolith-doctor": "./dist/cli/doctor.js",
-    "ragolith-eval": "./dist/cli/eval.js"
+    "ragolith-eval": "./dist/cli/eval.js",
+    "ragolith-analyze": "./dist/cli/analyze.js"
   },
   "exports": {
     ".": "./dist/core/index.js",
@@ -81,6 +82,7 @@
     "init": "tsx src/cli/init.ts",
     "doctor": "tsx src/cli/doctor.ts",
     "eval": "tsx src/cli/eval.ts",
+    "analyze": "tsx src/cli/analyze.ts",
     "weaviate:up": "docker compose up -d",
     "weaviate:down": "docker compose down",
     "weaviate:logs": "docker compose logs -f weaviate"

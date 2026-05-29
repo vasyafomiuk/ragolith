@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 14 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 15 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -22,6 +22,7 @@ import {
   CALL_EDGE,
 } from '../core/weaviate-client.js';
 import { search, searchArtifacts } from '../core/search.js';
+import { analyzeGaps } from '../core/analysis/gaps.js';
 import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
 
 const cfg = loadConfig();
@@ -397,6 +398,19 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         });
       }
       return jsonResult(artifact);
+    },
+  );
+
+  // 15. analyze_gaps — traceability gaps over the SDLC artifact graph.
+  server.tool(
+    'analyze_gaps',
+    'Find traceability gaps across the SDLC artifact graph: requirements with no implementation link, implementations with no test, accepted decisions never built, orphan tests, and links pointing to unknown artifacts. Returns a report with per-gap detail + severity and summary counts. Use for "what is unbuilt / untested / untraced".',
+    {
+      project: z.string().optional().describe('Restrict analysis to one project/product'),
+    },
+    async ({ project }) => {
+      const artifacts = await listArtifacts(client, project ? { project } : {});
+      return jsonResult(analyzeGaps(artifacts));
     },
   );
 

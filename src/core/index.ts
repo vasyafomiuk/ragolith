@@ -12,4 +12,5 @@ export * from './file-reader.js';
 export * from './git-manager.js';
 export * from './manifest-scan.js';
 export * from './sdlc.js';
+export * from './analysis/index.js';
 export * from './chunkers/index.js';
