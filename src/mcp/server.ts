@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 15 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 16 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -17,12 +17,14 @@ import {
   getArtifact,
   getTechStack,
   listArtifacts,
+  listProjectStacks,
   CODE_CHUNK,
   SYMBOL_RECORD,
   CALL_EDGE,
 } from '../core/weaviate-client.js';
 import { search, searchArtifacts } from '../core/search.js';
 import { analyzeGaps } from '../core/analysis/gaps.js';
+import { analyzeModernization } from '../core/analysis/modernization.js';
 import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
 
 const cfg = loadConfig();
@@ -411,6 +413,24 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     async ({ project }) => {
       const artifacts = await listArtifacts(client, project ? { project } : {});
       return jsonResult(analyzeGaps(artifacts));
+    },
+  );
+
+  // 16. analyze_modernization — EOL / legacy runtimes + frameworks.
+  server.tool(
+    'analyze_modernization',
+    'Flag end-of-life or legacy runtimes (Java 8, Node 16, Python 2, …) and frameworks (Spring Boot 2.x, AngularJS, Vue 2, legacy javax.* Java EE, …) from a project\'s detected tech stack, each with an upgrade recommendation. Use for "what needs upgrading", "are we on anything end-of-life", modernization planning.',
+    {
+      project: z.string().optional().describe('Restrict to one project; omit to scan all'),
+    },
+    async ({ project }) => {
+      const stacks = project
+        ? await (async () => {
+            const s = await getTechStack(client, project);
+            return s ? [s] : [];
+          })()
+        : await listProjectStacks(client);
+      return jsonResult(stacks.map((s) => analyzeModernization(s)));
     },
   );
 

@@ -2,3 +2,4 @@
 // monolith-decomposition analyses over the indexed SDLC + code graph.
 
 export * from './gaps.js';
+export * from './modernization.js';

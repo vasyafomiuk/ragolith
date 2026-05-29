@@ -377,6 +377,27 @@ export async function getTechStack(
   return stack;
 }
 
+/** Read every detected project tech stack. Used by modernization analysis. */
+export async function listProjectStacks(client: WeaviateClient): Promise<TechStack[]> {
+  const col = client.collections.get(PROJECT_STACK);
+  const res = await col.query.fetchObjects({ limit: 1000 });
+  return res.objects.map((obj) => {
+    const p = obj.properties as Record<string, unknown>;
+    const stack: TechStack = {
+      project: String(p['project'] ?? ''),
+      languages: (p['languages'] as string[] | undefined) ?? [],
+      build_tools: (p['build_tools'] as TechStack['build_tools'] | undefined) ?? [],
+      runtimes: safeParseJson<Record<string, string>>(p['runtimes_json']) ?? {},
+      frameworks: safeParseJson<TechStack['frameworks']>(p['frameworks_json']) ?? [],
+      manifests: safeParseJson<TechStack['manifests']>(p['manifests_json']) ?? [],
+      detected_at: String(p['detected_at'] ?? ''),
+    };
+    const sha = String(p['commit_sha'] ?? '');
+    if (sha) stack.commit_sha = sha;
+    return stack;
+  });
+}
+
 function safeParseJson<T>(raw: unknown): T | undefined {
   if (typeof raw !== 'string' || !raw) return undefined;
   try {
