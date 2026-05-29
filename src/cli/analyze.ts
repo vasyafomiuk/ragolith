@@ -16,6 +16,7 @@ import { Command } from 'commander';
 import { loadConfig } from '../core/config.js';
 import {
   connect,
+  fetchDecompositionInputs,
   getTechStack,
   listArtifacts,
   listProjectStacks,
@@ -26,6 +27,7 @@ import {
   type ModernizationReport,
   type ModernizationSeverity,
 } from '../core/analysis/modernization.js';
+import { decomposeProject, type DecompositionReport } from '../core/analysis/decomposition.js';
 
 function isTTY(): boolean {
   return !!process.stdout.isTTY && !process.env['NO_COLOR'];
@@ -184,6 +186,86 @@ async function runModernize(opts: {
   }
 }
 
+function printDecompositionReport(report: DecompositionReport): void {
+  const w = process.stdout.write.bind(process.stdout);
+  w(`\n${color(C.bold, `ragolith decomposition — ${report.project}`)}\n\n`);
+
+  if (report.modules.length === 0) {
+    w(`${color(C.dim, 'no modules found — has this project been ingested with call edges?')}\n\n`);
+    return;
+  }
+
+  w(color(C.bold, 'modules (by cohesion)\n'));
+  w(color(C.dim, '  module                     files  cohesion  instability  fanIn  fanOut\n'));
+  for (const m of report.modules.slice(0, 25)) {
+    w(
+      '  ' +
+        m.module.padEnd(26).slice(0, 26) +
+        ' ' +
+        String(m.files).padStart(5) +
+        '  ' +
+        m.cohesion.toFixed(2).padStart(8) +
+        '  ' +
+        m.instability.toFixed(2).padStart(11) +
+        '  ' +
+        String(m.fanIn).padStart(5) +
+        '  ' +
+        String(m.fanOut).padStart(6) +
+        '\n',
+    );
+  }
+
+  if (report.seams.length > 0) {
+    w(`\n${color(C.bold, 'suggested service seams')}\n`);
+    for (const s of report.seams) {
+      w(
+        `  ${color(C.green, '◆')} ${color(C.bold, s.module)} ${color(C.dim, `(${s.files} files)`)}\n`,
+      );
+      w(`      ${color(C.dim, s.rationale)}\n`);
+    }
+  }
+
+  if (report.couplings.length > 0) {
+    w(
+      `\n${color(C.bold, 'tightest cross-module couplings')} ${color(C.dim, '(migration friction)')}\n`,
+    );
+    for (const c of report.couplings.slice(0, 10)) {
+      w(`  ${c.calls.toString().padStart(4)} calls   ${c.a} ${color(C.dim, '↔')} ${c.b}\n`);
+    }
+  }
+
+  w(
+    `\n${color(C.bold, 'summary')}  ${report.totals.modules} modules  ·  ` +
+      `${report.totals.crossModuleCalls} cross-module calls  ·  ${report.seams.length} seam(s)\n\n`,
+  );
+}
+
+async function runDecompose(opts: {
+  project?: string;
+  depth?: string;
+  json?: boolean;
+}): Promise<void> {
+  const cfg = loadConfig();
+  if (!opts.project) {
+    process.stderr.write('[analyze] decompose requires --project <name>\n');
+    process.exitCode = 1;
+    return;
+  }
+  const client = await connect(cfg.weaviate);
+  try {
+    const inputs = await fetchDecompositionInputs(client, opts.project);
+    const moduleDepth = opts.depth ? Math.max(1, Number.parseInt(opts.depth, 10) || 1) : 1;
+    const report = decomposeProject(opts.project, inputs, { moduleDepth });
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    } else {
+      printDecompositionReport(report);
+    }
+  } finally {
+    await client.close();
+  }
+}
+
 const program = new Command();
 program.name('ragolith-analyze').description('Analyses over the indexed SDLC + code graph.');
 
@@ -202,6 +284,14 @@ program
   .option('--json', 'Emit the raw reports as JSON', false)
   .option('--strict', 'Exit non-zero (2) if any high-severity finding is present', false)
   .action(runModernize);
+
+program
+  .command('decompose')
+  .description('Suggest microservice boundaries from the module dependency graph')
+  .requiredOption('--project <name>', 'Project to analyze')
+  .option('--depth <n>', 'Path segments that form a module key (default 1)')
+  .option('--json', 'Emit the raw DecompositionReport as JSON', false)
+  .action(runDecompose);
 
 program.parseAsync(process.argv).catch((err) => {
   process.stderr.write(

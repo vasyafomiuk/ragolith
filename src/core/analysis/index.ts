@@ -3,3 +3,4 @@
 
 export * from './gaps.js';
 export * from './modernization.js';
+export * from './decomposition.js';

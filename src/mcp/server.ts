@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 16 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 17 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -14,6 +14,7 @@ import { loadConfig } from '../core/config.js';
 import {
   connect,
   ensureSchema,
+  fetchDecompositionInputs,
   getArtifact,
   getTechStack,
   listArtifacts,
@@ -25,6 +26,7 @@ import {
 import { search, searchArtifacts } from '../core/search.js';
 import { analyzeGaps } from '../core/analysis/gaps.js';
 import { analyzeModernization } from '../core/analysis/modernization.js';
+import { decomposeProject } from '../core/analysis/decomposition.js';
 import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
 
 const cfg = loadConfig();
@@ -431,6 +433,26 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
           })()
         : await listProjectStacks(client);
       return jsonResult(stacks.map((s) => analyzeModernization(s)));
+    },
+  );
+
+  // 17. analyze_decomposition — suggest service boundaries for a monolith.
+  server.tool(
+    'analyze_decomposition',
+    'Analyze a project\'s module dependency graph (from call edges) and suggest microservice boundaries: per-module cohesion + instability + fan-in/out, candidate "seams" (cohesive, loosely-coupled modules to extract first), and the tightest cross-module couplings (the hardest joints to cut). Use for monolith-to-microservices migration planning. Best for TS/JS today (call edges); other languages fall back to module structure.',
+    {
+      project: z.string().describe('Project name as listed by list_projects'),
+      depth: z
+        .number()
+        .int()
+        .min(1)
+        .max(4)
+        .optional()
+        .describe('Path segments that form a module key (default 1)'),
+    },
+    async ({ project, depth }) => {
+      const inputs = await fetchDecompositionInputs(client, project);
+      return jsonResult(decomposeProject(project, inputs, { moduleDepth: depth ?? 1 }));
     },
   );
 

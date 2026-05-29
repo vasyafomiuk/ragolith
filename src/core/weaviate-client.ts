@@ -377,6 +377,69 @@ export async function getTechStack(
   return stack;
 }
 
+export interface DecompositionInputs {
+  /** file_path → defining module is computed by the caller; here we return raw rows. */
+  files: { file_path: string; language: string }[];
+  symbols: { name: string; file_path: string }[];
+  edges: { file: string; callee: string }[];
+}
+
+/**
+ * Fetch the raw inputs for monolith-decomposition analysis for one project:
+ * the file inventory (from CodeChunk), the symbol→file index (SymbolRecord),
+ * and the call edges (CallEdge). The pure analysis in
+ * core/analysis/decomposition.ts turns these into a module graph.
+ */
+export async function fetchDecompositionInputs(
+  client: WeaviateClient,
+  project: string,
+): Promise<DecompositionInputs> {
+  const chunkCol = client.collections.get(CODE_CHUNK);
+  const symCol = client.collections.get(SYMBOL_RECORD);
+  const edgeCol = client.collections.get(CALL_EDGE);
+
+  // Weaviate's QUERY_MAXIMUM_RESULTS defaults to 10000, so cap each fetch
+  // there. Very large monorepos may truncate; pagination is a future refinement.
+  const MAX = 10000;
+  const [chunkRes, symRes, edgeRes] = await Promise.all([
+    chunkCol.query.fetchObjects({
+      filters: chunkCol.filter.byProperty('project').equal(project),
+      limit: MAX,
+      returnProperties: ['file_path', 'language'],
+    }),
+    symCol.query.fetchObjects({
+      filters: symCol.filter.byProperty('project').equal(project),
+      limit: MAX,
+      returnProperties: ['name', 'file_path'],
+    }),
+    edgeCol.query.fetchObjects({
+      filters: edgeCol.filter.byProperty('project').equal(project),
+      limit: MAX,
+      returnProperties: ['file', 'callee'],
+    }),
+  ]);
+
+  // CodeChunk has many rows per file; dedupe to distinct files.
+  const fileMap = new Map<string, string>();
+  for (const o of chunkRes.objects) {
+    const p = o.properties as Record<string, unknown>;
+    const fp = String(p['file_path'] ?? '');
+    if (fp && !fileMap.has(fp)) fileMap.set(fp, String(p['language'] ?? ''));
+  }
+
+  return {
+    files: [...fileMap.entries()].map(([file_path, language]) => ({ file_path, language })),
+    symbols: symRes.objects.map((o) => {
+      const p = o.properties as Record<string, unknown>;
+      return { name: String(p['name'] ?? ''), file_path: String(p['file_path'] ?? '') };
+    }),
+    edges: edgeRes.objects.map((o) => {
+      const p = o.properties as Record<string, unknown>;
+      return { file: String(p['file'] ?? ''), callee: String(p['callee'] ?? '') };
+    }),
+  };
+}
+
 /** Read every detected project tech stack. Used by modernization analysis. */
 export async function listProjectStacks(client: WeaviateClient): Promise<TechStack[]> {
   const col = client.collections.get(PROJECT_STACK);
