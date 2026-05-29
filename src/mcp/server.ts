@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 11 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 14 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -14,13 +14,15 @@ import { loadConfig } from '../core/config.js';
 import {
   connect,
   ensureSchema,
+  getArtifact,
   getTechStack,
+  listArtifacts,
   CODE_CHUNK,
   SYMBOL_RECORD,
   CALL_EDGE,
 } from '../core/weaviate-client.js';
-import { search } from '../core/search.js';
-import type { IngestState, Language } from '../core/types.js';
+import { search, searchArtifacts } from '../core/search.js';
+import type { IngestState, Language, SdlcArtifactKind } from '../core/types.js';
 
 const cfg = loadConfig();
 
@@ -315,6 +317,86 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
         });
       }
       return jsonResult(out);
+    },
+  );
+
+  // 12. search_sdlc — hybrid search over SDLC artifacts.
+  server.tool(
+    'search_sdlc',
+    'Search SDLC artifacts — requirements, design decisions (ADRs), tickets, test cases, runbooks, API specs, incidents. Returns title, kind, status, excerpt, and source. Use this for "what did we decide about X", "which requirements cover Y", "is there a runbook for Z".',
+    {
+      query: z.string().describe('Free-text query — natural language or identifier'),
+      limit: z.number().int().min(1).max(50).optional().describe('Max hits (default 10)'),
+      project: z.string().optional().describe('Restrict to one project/product'),
+      source: z.string().optional().describe('Restrict to one source system (jira, local, …)'),
+      kind: z
+        .string()
+        .optional()
+        .describe('Restrict to one kind (requirement, decision, ticket, test_case, …)'),
+    },
+    async ({ query, limit, project, source, kind }) => {
+      const hits = await searchArtifacts(client, {
+        query,
+        limit: limit ?? 10,
+        ...(project ? { project } : {}),
+        ...(source ? { source } : {}),
+        ...(kind ? { kind: kind as SdlcArtifactKind } : {}),
+        rerankerEnabled: cfg.search.rerankerEnabled,
+      });
+      return jsonResult(hits);
+    },
+  );
+
+  // 13. list_artifacts — enumerate SDLC artifacts with metadata filters.
+  server.tool(
+    'list_artifacts',
+    'List SDLC artifacts with optional filters (project, source, kind, status). Returns id, kind, title, status, and link count — a lightweight inventory, not full bodies. Use search_sdlc for content search.',
+    {
+      project: z.string().optional(),
+      source: z.string().optional(),
+      kind: z.string().optional(),
+      status: z.string().optional(),
+      limit: z.number().int().min(1).max(5000).optional(),
+    },
+    async ({ project, source, kind, status, limit }) => {
+      const artifacts = await listArtifacts(client, {
+        ...(project ? { project } : {}),
+        ...(source ? { source } : {}),
+        ...(kind ? { kind } : {}),
+        ...(status ? { status } : {}),
+        ...(limit ? { limit } : {}),
+      });
+      const summary = artifacts.map((a) => ({
+        artifact_id: a.artifact_id,
+        kind: a.kind,
+        title: a.title,
+        status: a.status ?? '',
+        project: a.project,
+        source: a.source,
+        links: a.links.length,
+      }));
+      return jsonResult(summary);
+    },
+  );
+
+  // 14. get_artifact — full artifact by (source, id).
+  server.tool(
+    'get_artifact',
+    'Fetch one SDLC artifact in full — body, tags, links, status, url — by its source and artifact_id (as returned by search_sdlc / list_artifacts).',
+    {
+      source: z.string().describe('Source label, e.g. "jira" or the config source name'),
+      artifact_id: z.string().describe('Artifact id, e.g. "PROJ-123" or "ADR-0007"'),
+    },
+    async ({ source, artifact_id }) => {
+      const artifact = await getArtifact(client, source, artifact_id);
+      if (!artifact) {
+        return jsonResult({
+          source,
+          artifact_id,
+          error: 'not found — check source + artifact_id, or whether it has been ingested',
+        });
+      }
+      return jsonResult(artifact);
     },
   );
 

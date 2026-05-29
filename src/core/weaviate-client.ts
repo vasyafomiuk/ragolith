@@ -16,7 +16,8 @@ import weaviate, {
   configure,
   Filters,
 } from 'weaviate-client';
-import type { TechStack, WeaviateConnConfig } from './types.js';
+import type { ArtifactLink, SdlcArtifact, TechStack, WeaviateConnConfig } from './types.js';
+import { artifactContent } from './sdlc.js';
 
 export const CODE_CHUNK = 'CodeChunk';
 export const SYMBOL_RECORD = 'SymbolRecord';
@@ -195,6 +196,128 @@ export function artifactUuid(source: string, artifactId: string): string {
 export async function deleteSdlcSource(client: WeaviateClient, source: string): Promise<void> {
   const col = client.collections.get(SDLC_ARTIFACT);
   await col.data.deleteMany(col.filter.byProperty('source').equal(source));
+}
+
+/** Map an SdlcArtifact to its Weaviate property bag. */
+function artifactProps(a: SdlcArtifact): Record<string, unknown> {
+  return {
+    content: artifactContent(a),
+    raw_body: a.body,
+    artifact_id: a.artifact_id,
+    title: a.title,
+    kind: a.kind,
+    status: a.status ?? '',
+    source: a.source,
+    project: a.project,
+    tags: a.tags,
+    author: a.author ?? '',
+    url: a.url ?? '',
+    links_json: JSON.stringify(a.links),
+    link_rels: a.links.map((l) => l.rel),
+    link_targets: a.links.map((l) => l.target),
+    created_at: a.created_at ?? '',
+    updated_at: a.updated_at ?? '',
+  };
+}
+
+/**
+ * Insert/replace SDLC artifacts. The deterministic `artifactUuid` means
+ * re-inserting an artifact with the same (source, id) overwrites the prior
+ * row cleanly — so callers can delete-by-source then insert, or just insert
+ * to upsert in place.
+ */
+export async function insertArtifacts(
+  client: WeaviateClient,
+  artifacts: SdlcArtifact[],
+): Promise<void> {
+  if (artifacts.length === 0) return;
+  const col = client.collections.get(SDLC_ARTIFACT);
+  const BATCH = 200;
+  for (let i = 0; i < artifacts.length; i += BATCH) {
+    const slice = artifacts.slice(i, i + BATCH);
+    await col.data.insertMany(
+      slice.map((a) => ({
+        id: artifactUuid(a.source, a.artifact_id),
+        properties: artifactProps(a) as Record<string, never>,
+      })),
+    );
+  }
+}
+
+/** Reconstruct an SdlcArtifact from a Weaviate property bag. */
+function propsToArtifact(p: Record<string, unknown>): SdlcArtifact {
+  let links: ArtifactLink[] = [];
+  const raw = p['links_json'];
+  if (typeof raw === 'string' && raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) links = parsed as ArtifactLink[];
+    } catch {
+      // leave links empty on malformed JSON
+    }
+  }
+  const a: SdlcArtifact = {
+    artifact_id: String(p['artifact_id'] ?? ''),
+    kind: (String(p['kind'] ?? 'other') || 'other') as SdlcArtifact['kind'],
+    title: String(p['title'] ?? ''),
+    body: String(p['raw_body'] ?? ''),
+    source: String(p['source'] ?? ''),
+    project: String(p['project'] ?? ''),
+    links,
+    tags: Array.isArray(p['tags']) ? (p['tags'] as string[]) : [],
+  };
+  const status = String(p['status'] ?? '');
+  if (status) a.status = status;
+  const author = String(p['author'] ?? '');
+  if (author) a.author = author;
+  const url = String(p['url'] ?? '');
+  if (url) a.url = url;
+  const createdAt = String(p['created_at'] ?? '');
+  if (createdAt) a.created_at = createdAt;
+  const updatedAt = String(p['updated_at'] ?? '');
+  if (updatedAt) a.updated_at = updatedAt;
+  return a;
+}
+
+export interface ListArtifactsFilter {
+  project?: string;
+  source?: string;
+  kind?: string;
+  status?: string;
+  limit?: number;
+}
+
+/** List artifacts with optional metadata filters. No vector query — a scan. */
+export async function listArtifacts(
+  client: WeaviateClient,
+  filter: ListArtifactsFilter = {},
+): Promise<SdlcArtifact[]> {
+  const col = client.collections.get(SDLC_ARTIFACT);
+  const clauses = [
+    filter.project ? col.filter.byProperty('project').equal(filter.project) : undefined,
+    filter.source ? col.filter.byProperty('source').equal(filter.source) : undefined,
+    filter.kind ? col.filter.byProperty('kind').equal(filter.kind) : undefined,
+    filter.status ? col.filter.byProperty('status').equal(filter.status) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+  const filters =
+    clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : Filters.and(...clauses);
+  const res = await col.query.fetchObjects({
+    limit: filter.limit ?? 5000,
+    ...(filters ? { filters } : {}),
+  });
+  return res.objects.map((o) => propsToArtifact(o.properties as Record<string, unknown>));
+}
+
+/** Fetch a single artifact by (source, id). Returns undefined if absent. */
+export async function getArtifact(
+  client: WeaviateClient,
+  source: string,
+  artifactId: string,
+): Promise<SdlcArtifact | undefined> {
+  const col = client.collections.get(SDLC_ARTIFACT);
+  const obj = await col.query.fetchObjectById(artifactUuid(source, artifactId));
+  if (!obj) return undefined;
+  return propsToArtifact(obj.properties as Record<string, unknown>);
 }
 
 /**

@@ -27,6 +27,8 @@ import {
   ensureSchema,
   deleteFiles,
   deleteProject,
+  deleteSdlcSource,
+  insertArtifacts,
   upsertTechStack,
   CODE_CHUNK,
   SYMBOL_RECORD,
@@ -37,8 +39,16 @@ import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
 import { createProgress } from '../core/progress.js';
 import { runMigrations } from '../core/migrations.js';
+import { isRsifFile, parseRsifFile, type ArtifactDefaults } from '../core/sdlc.js';
 import { detectTechStack } from '../core/manifest-scan.js';
-import type { ChunkResult, IngestState, ProjectConfig, FileConfig } from '../core/types.js';
+import type {
+  ChunkResult,
+  IngestState,
+  ProjectConfig,
+  FileConfig,
+  SdlcArtifact,
+  SdlcSourceConfig,
+} from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
 // Under module:NodeNext the default-import dance confuses TS into seeing it as
@@ -340,6 +350,91 @@ async function ingestStandalone(
   };
 }
 
+const RSIF_EXTENSIONS = new Set(['.md', '.markdown', '.ndjson', '.jsonl', '.json']);
+
+/**
+ * Ingest one SDLC source: read RSIF files from a directory (or a single file),
+ * parse them into artifacts, and upsert into the SdlcArtifact collection.
+ * Incremental by newest-mtime across the source — re-reads the whole source
+ * when anything changed (cheap; artifact sets are small).
+ */
+async function ingestSdlcSource(
+  client: WeaviateClient,
+  src: SdlcSourceConfig,
+  state: IngestState,
+  full: boolean,
+): Promise<void> {
+  const abs = resolve(src.path);
+  process.stderr.write(`[ingest] sdlc: ${src.name} (${abs})\n`);
+  if (!existsSync(abs)) {
+    process.stderr.write('[ingest]   path not found, skipping\n');
+    return;
+  }
+
+  const rootStat = await stat(abs);
+  let files: string[];
+  if (rootStat.isDirectory()) {
+    const ig = await loadGitignore(abs);
+    files = await walk(abs, RSIF_EXTENSIONS, ig);
+  } else {
+    files = isRsifFile(abs) ? [abs] : [];
+  }
+  if (files.length === 0) {
+    process.stderr.write('[ingest]   no RSIF files (.md/.ndjson/.jsonl/.json) found\n');
+    return;
+  }
+
+  // Newest mtime across the source drives the incremental skip.
+  let newest = 0;
+  for (const f of files) {
+    const fst = await stat(f);
+    if (fst.mtimeMs > newest) newest = fst.mtimeMs;
+  }
+  const prev = state.sdlc?.[src.name];
+  if (!full && prev && prev.mtime_ms === newest) {
+    process.stderr.write('[ingest]   up-to-date, skipping\n');
+    return;
+  }
+
+  // The config `name` doubles as the default `source` label so each configured
+  // source is isolated for delete-then-reinsert. Set `source` explicitly in the
+  // artifacts/config to share a system-of-record label across sources.
+  const defaults: ArtifactDefaults = {
+    source: src.source ?? src.name,
+    project: src.project ?? src.name,
+  };
+
+  const artifacts: SdlcArtifact[] = [];
+  let warnings = 0;
+  for (const f of files) {
+    const text = await readFile(f, 'utf-8');
+    const res = parseRsifFile(f, text, defaults);
+    artifacts.push(...res.artifacts);
+    for (const w of res.warnings) {
+      warnings++;
+      process.stderr.write(`[ingest]   warn: ${relative(abs, f)}: ${w}\n`);
+    }
+  }
+
+  // Clear prior rows for every source label we're about to write, so artifacts
+  // deleted/renamed in the files don't linger in the index.
+  for (const label of new Set(artifacts.map((a) => a.source))) {
+    await deleteSdlcSource(client, label);
+  }
+  await insertArtifacts(client, artifacts);
+
+  state.sdlc = state.sdlc ?? {};
+  state.sdlc[src.name] = {
+    mtime_ms: newest,
+    updated_at: new Date().toISOString(),
+    count: artifacts.length,
+  };
+  process.stderr.write(
+    `[ingest]   indexed ${artifacts.length} artifacts from ${files.length} files` +
+      `${warnings ? ` (${warnings} warnings)` : ''}\n`,
+  );
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
@@ -348,6 +443,7 @@ async function main(): Promise<void> {
     .option('--full', 'Force a full rebuild (delete + re-ingest all projects)', false)
     .option('--project <name>', 'Restrict to one project name')
     .option('--file <name>', 'Restrict to one standalone file entry')
+    .option('--sdlc <name>', 'Restrict to one SDLC source entry')
     .option('--migrate-only', 'Run schema migrations and exit without ingesting anything', false)
     .parse(process.argv);
 
@@ -355,6 +451,7 @@ async function main(): Promise<void> {
     full: boolean;
     project?: string;
     file?: string;
+    sdlc?: string;
     migrateOnly: boolean;
   }>();
   const cfg = loadConfig();
@@ -383,6 +480,9 @@ async function main(): Promise<void> {
 
   const projects = opts.project ? cfg.repos.filter((p) => p.name === opts.project) : cfg.repos;
   const files = opts.file ? cfg.documents.filter((f) => f.name === opts.file) : cfg.documents;
+  const sdlcSources = opts.sdlc
+    ? (cfg.sdlc ?? []).filter((s) => s.name === opts.sdlc)
+    : (cfg.sdlc ?? []);
 
   // Ensure the workDir exists before any clone attempts.
   await mkdir(resolve(cfg.ingest.workDir), { recursive: true });
@@ -412,6 +512,16 @@ async function main(): Promise<void> {
     } catch (err) {
       const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
       process.stderr.write(`[ingest] file "${file.name}" failed: ${msg}\n`);
+    }
+  }
+
+  for (const src of sdlcSources) {
+    try {
+      await ingestSdlcSource(client, src, state, opts.full);
+      await saveState(stateFile, state);
+    } catch (err) {
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      process.stderr.write(`[ingest] sdlc "${src.name}" failed: ${msg}\n`);
     }
   }
 

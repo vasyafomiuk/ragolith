@@ -7,8 +7,8 @@
 //   6. Diversity filter (max N results per file).
 
 import { Filters, type WeaviateClient } from 'weaviate-client';
-import { CODE_CHUNK } from './weaviate-client.js';
-import type { Language, SearchHit } from './types.js';
+import { CODE_CHUNK, SDLC_ARTIFACT } from './weaviate-client.js';
+import type { ArtifactHit, Language, SdlcArtifactKind, SearchHit } from './types.js';
 
 export interface SearchOptions {
   query: string;
@@ -173,4 +173,84 @@ export async function search(client: WeaviateClient, opts: SearchOptions): Promi
   // Stage 6 — diversity filter then final limit.
   const diverse = diversityFilter(trimmed, opts.diversityPerFile);
   return diverse.slice(0, limit);
+}
+
+// --- SDLC artifact search ---------------------------------------------------
+
+export interface ArtifactSearchOptions {
+  query: string;
+  limit?: number;
+  project?: string;
+  source?: string;
+  kind?: SdlcArtifactKind;
+  rerankerEnabled: boolean;
+}
+
+/**
+ * Hybrid search over the SDLC artifact index. Same classify→expand→hybrid→
+ * rerank→autocut shape as code search, minus the per-file diversity step
+ * (artifacts are whole documents, not chunks of one file).
+ */
+export async function searchArtifacts(
+  client: WeaviateClient,
+  opts: ArtifactSearchOptions,
+): Promise<ArtifactHit[]> {
+  const limit = opts.limit ?? 10;
+  const alpha = classifyAlpha(opts.query);
+  const expanded = expandQuery(opts.query);
+
+  const col = client.collections.get(SDLC_ARTIFACT);
+  const clauses = [
+    opts.project ? col.filter.byProperty('project').equal(opts.project) : undefined,
+    opts.source ? col.filter.byProperty('source').equal(opts.source) : undefined,
+    opts.kind ? col.filter.byProperty('kind').equal(opts.kind) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+  const filter =
+    clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : Filters.and(...clauses);
+
+  const overFetch = limit * 2;
+  let response;
+  try {
+    response = await col.query.hybrid(expanded, {
+      alpha,
+      limit: overFetch,
+      returnMetadata: ['score'],
+      ...(filter ? { filters: filter } : {}),
+      ...(opts.rerankerEnabled ? { rerank: { property: 'content', query: opts.query } } : {}),
+    });
+  } catch (err) {
+    if (opts.rerankerEnabled) {
+      response = await col.query.hybrid(expanded, {
+        alpha,
+        limit: overFetch,
+        returnMetadata: ['score'],
+        ...(filter ? { filters: filter } : {}),
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  const ranked: ArtifactHit[] = response.objects.map((o) => {
+    const p = o.properties as Record<string, unknown>;
+    const meta = o.metadata as { score?: number; rerankScore?: number } | undefined;
+    const body = (p['raw_body'] as string) ?? '';
+    const hit: ArtifactHit = {
+      artifact_id: (p['artifact_id'] as string) ?? '',
+      kind: ((p['kind'] as string) || 'other') as SdlcArtifactKind,
+      title: (p['title'] as string) ?? '',
+      excerpt: body.length > 500 ? body.slice(0, 500) + '…' : body,
+      source: (p['source'] as string) ?? '',
+      project: (p['project'] as string) ?? '',
+      score: meta?.rerankScore ?? meta?.score ?? 0,
+    };
+    const status = p['status'];
+    if (typeof status === 'string' && status) hit.status = status;
+    const url = p['url'];
+    if (typeof url === 'string' && url) hit.url = url;
+    return hit;
+  });
+
+  const cutoff = autocut(ranked.map((h) => h.score));
+  return ranked.slice(0, cutoff).slice(0, limit);
 }

@@ -104,6 +104,20 @@ export interface SearchHit {
   score: number;
 }
 
+/** A search hit over the SDLC artifact index. */
+export interface ArtifactHit {
+  artifact_id: string;
+  kind: SdlcArtifactKind;
+  title: string;
+  /** Excerpt of the artifact body. */
+  excerpt: string;
+  source: string;
+  project: string;
+  status?: string;
+  url?: string;
+  score: number;
+}
+
 /**
  * One indexable repository — git clone (`repo`) or local directory
  * (`localPath`). Walked respecting `.gitignore`, chunked by the
