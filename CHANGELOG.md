@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. Format loosely follows [K
 
 ## [Unreleased]
 
+### Changed
+
+- **Dashboard simplified.** It had grown to 8 flat nav items with two separate search boxes and power-user controls on every view. Reworked for clarity:
+  - **One unified Search** with a scope toggle (Everything / Code / Docs / SDLC artifacts) replaces the separate Search and SDLC tabs. "Everything" runs code + artifact search in parallel and shows two labeled groups; switching scope re-runs instantly.
+  - **Grouped sidebar** — 7 items in two labeled sections, **Explore** (Home, Search, Analysis) and **Manage** (Ingest, Backup, Config, Health), so daily-use views stand out and admin tools recede.
+  - **Advanced disclosures** — power-user controls fold behind `Advanced` `<details>`: search-effort sliders (the 3 preset buttons + token estimate stay visible), Backup verify + S3 push/pull, Ingest force-full + migrate-only. Default surface is clean.
+  - **Home landing** (new default route) — a single page with a search box, a colour-coded "Needs attention" summary (unimplemented requirements / other gaps / end-of-life / modernization counts, linking to Analysis), and the indexed-projects table. The standalone Projects tab folded into Home; `#projects` redirects there.
+
 ### Added
 
 - **Call edges for every chunked language** — Python, Go, Rust, Ruby, and PHP now emit `caller → callee` edges from the tree-sitter walker (joining TS/JS, C#, Java), so `callers_of`/`callees_of` and the **decomposition / service-composition graph** work for all eight languages. Per-grammar callee extraction (Python `attribute`, Go `selector_expression`, Rust `field_expression`/`scoped_identifier`/`macro_invocation`, Ruby receiver-method, PHP member/scoped calls), verified empirically against each grammar and covered by a per-language edge test. Member calls tag `call_type: 'method'`, bare calls `'static'`.

@@ -1,11 +1,11 @@
 // Dashboard frontend — vanilla JS, no bundler, no framework.
 //
 // Routes (hash-based, server stays dumb):
-//   #projects               project list
-//   #search                 search form + results
-//   #config                 form + JSON editor for ragc.config.json
-//   #health                 stack health probe
-//   #project/<name>         drill into one project
+//   #home                   landing: search box + needs-attention + projects
+//   #search                 unified search (code / docs / SDLC) + results
+//   #analysis               gaps / modernization / decomposition
+//   #ingest #backup #config #health
+//   #project/<name>         drill into one project (reached from Home)
 
 // ----- helpers --------------------------------------------------------------
 
@@ -67,38 +67,35 @@ function applySetupBanner() {
 
 // ----- routing --------------------------------------------------------------
 
-const VIEWS = [
-  'projects',
-  'search',
-  'sdlc',
-  'analysis',
-  'project',
-  'ingest',
-  'backup',
-  'config',
-  'health',
-];
+const VIEWS = ['home', 'search', 'analysis', 'project', 'ingest', 'backup', 'config', 'health'];
+
+// Nav links are grouped now; map a view to the nav route that should light up.
+function navRouteFor(view) {
+  if (view === 'project') return 'home'; // project detail lives under Home
+  return view;
+}
 
 function showView(view) {
   for (const v of VIEWS) {
     const el = $(`view-${v}`);
     if (el) el.hidden = v !== view;
   }
+  const active = navRouteFor(view);
   document.querySelectorAll('.navlink').forEach((a) => {
-    a.classList.toggle('active', a.dataset.route === view);
+    a.classList.toggle('active', a.dataset.route === active);
   });
 }
 
 async function route() {
-  let hash = window.location.hash.replace(/^#/, '') || 'projects';
-  // legacy default route
-  if (hash === 'home') hash = 'projects';
+  let hash = window.location.hash.replace(/^#/, '') || 'home';
+  // Legacy routes → Home (which now hosts the project list).
+  if (hash === 'projects') hash = 'home';
 
   // First-run redirect: if this is a fresh tab AND the config file doesn't
   // exist, drop the user straight into #config. We only do this once per
-  // session so they can still navigate away to #projects / #health.
+  // session so they can still navigate away.
   if (configExists === null) await refreshConfigPresence();
-  if (configExists === false && !autoRedirected && hash === 'projects') {
+  if (configExists === false && !autoRedirected && hash === 'home') {
     autoRedirected = true;
     window.location.hash = '#config';
     return;
@@ -114,10 +111,7 @@ async function route() {
   if (hash === 'search') {
     showView('search');
     await ensureProjectFilter();
-    return;
-  }
-  if (hash === 'sdlc') {
-    showView('sdlc');
+    runPendingSearch();
     return;
   }
   if (hash === 'analysis') {
@@ -145,8 +139,8 @@ async function route() {
     await renderHealth();
     return;
   }
-  showView('projects');
-  await renderProjects();
+  showView('home');
+  await renderHome();
 }
 
 window.addEventListener('hashchange', route);
@@ -209,6 +203,75 @@ async function renderProjects() {
   } catch (err) {
     body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${escape(err.message)}</td></tr>`;
   }
+}
+
+// ----- home view ------------------------------------------------------------
+
+async function renderHome() {
+  await Promise.all([renderProjects(), renderNeedsAttention()]);
+}
+
+async function renderNeedsAttention() {
+  const out = $('home-attention');
+  if (!out) return;
+  out.innerHTML = '<span class="muted small">Loading…</span>';
+  try {
+    const [gaps, mod] = await Promise.all([
+      api('/api/analysis/gaps'),
+      api('/api/analysis/modernization'),
+    ]);
+    const g = gaps.counts || {};
+    const highGaps = g.unimplemented_requirement || 0;
+    const otherGaps =
+      (g.untested_requirement || 0) +
+      (g.unimplemented_decision || 0) +
+      (g.orphan_test || 0) +
+      (g.dangling_link || 0);
+    let modHigh = 0;
+    let modWarn = 0;
+    for (const r of Array.isArray(mod) ? mod : []) {
+      modHigh += r.counts?.high || 0;
+      modWarn += r.counts?.warning || 0;
+    }
+    const totalGaps = Array.isArray(gaps.gaps) ? gaps.gaps.length : 0;
+
+    if (totalGaps === 0 && modHigh === 0 && modWarn === 0) {
+      out.innerHTML =
+        '<span class="ok-text">✓ Nothing flagged — no traceability gaps or modernization findings.</span>';
+      return;
+    }
+    const tile = (n, label, hot) =>
+      `<a class="attn-tile ${n > 0 ? (hot ? 'attn-high' : 'attn-warn') : 'attn-ok'}" href="#analysis">` +
+      `<span class="attn-num">${n}</span><span class="attn-label">${label}</span></a>`;
+    out.innerHTML =
+      '<div class="attn-row">' +
+      tile(highGaps, 'unimplemented requirements', true) +
+      tile(otherGaps, 'other traceability gaps', false) +
+      tile(modHigh, 'end-of-life findings', true) +
+      tile(modWarn, 'modernization warnings', false) +
+      '</div>';
+  } catch (err) {
+    out.innerHTML = `<span class="muted small">Analysis unavailable: ${escape(err.message)}</span>`;
+  }
+}
+
+// Home search box → jump to the Search view and run the query there.
+let pendingSearchQuery = null;
+$('home-search-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = $('home-search-input').value.trim();
+  if (!q) return;
+  pendingSearchQuery = q;
+  window.location.hash = '#search';
+});
+
+function runPendingSearch() {
+  if (pendingSearchQuery == null) return;
+  const q = pendingSearchQuery;
+  pendingSearchQuery = null;
+  $('search-input').value = q;
+  $('search-scope').value = 'everything';
+  void doSearch();
 }
 
 // Event delegation — one listener on tbody handles every row's buttons. Means
@@ -330,9 +393,52 @@ async function ensureProjectFilter() {
   }
 }
 
-$('search-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+// One search box, multiple scopes. "Everything" runs code/doc + artifact
+// search in parallel and shows two groups; the others target one index.
+const DOC_LANGS = new Set(['pdf', 'docx', 'markdown', 'text']);
+
+function codeHitHtml(h) {
+  const tags = [
+    h.symbol ? `<code>${escape(h.symbol)}</code>` : '',
+    `<span class="lang-pill">${escape(h.language)}</span>`,
+    `<span class="muted">${escape(h.chunk_type)}</span>`,
+    `<span class="score">${h.score.toFixed(3)}</span>`,
+  ]
+    .filter(Boolean)
+    .join('');
+  return (
+    `<li><div class="meta"><span class="file">${escape(h.project)} · ` +
+    `${escape(h.file_path)}:${h.start_line}-${h.end_line}</span>${tags}</div>` +
+    `<pre>${escape(h.content)}</pre></li>`
+  );
+}
+
+function artifactHitHtml(h) {
+  const tags = [
+    `<span class="lang-pill">${escape(h.kind)}</span>`,
+    h.status ? `<span class="muted">${escape(h.status)}</span>` : '',
+    `<span class="muted small">${escape(h.project)} · ${escape(h.source)}</span>`,
+    `<span class="score">${h.score.toFixed(3)}</span>`,
+  ]
+    .filter(Boolean)
+    .join('');
+  return (
+    `<li><div class="meta"><span class="file"><code>${escape(h.artifact_id)}</code> ` +
+    `${escape(h.title)}</span>${tags}</div><pre>${escape(h.excerpt)}</pre></li>`
+  );
+}
+
+function postSearch(path, body) {
+  return api(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function doSearch() {
   const query = $('search-input').value.trim();
+  const scope = $('search-scope').value;
   const project = $('search-project').value;
   if (!query) return;
   const list = $('search-results');
@@ -340,92 +446,53 @@ $('search-form').addEventListener('submit', async (e) => {
   list.innerHTML = '';
   status.textContent = 'Searching…';
   try {
-    const body = { query, limit: 20 };
-    if (project) body.project = project;
-    const hits = await api('/api/search', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (hits.length === 0) {
+    const base = { query, limit: 20 };
+    if (project) base.project = project;
+    let html = '';
+    let count = 0;
+
+    if (scope === 'sdlc') {
+      const hits = await postSearch('/api/sdlc/search', base);
+      count = hits.length;
+      html = hits.map(artifactHitHtml).join('');
+    } else if (scope === 'code' || scope === 'docs') {
+      const hits = await postSearch('/api/search', base);
+      const filtered = hits.filter((h) =>
+        scope === 'docs' ? DOC_LANGS.has(h.language) : !DOC_LANGS.has(h.language),
+      );
+      count = filtered.length;
+      html = filtered.map(codeHitHtml).join('');
+    } else {
+      // everything — code/docs + artifacts, two labeled groups.
+      const [code, arts] = await Promise.all([
+        postSearch('/api/search', base),
+        postSearch('/api/sdlc/search', base).catch(() => []),
+      ]);
+      count = code.length + arts.length;
+      if (code.length)
+        html += '<li class="hit-group">Code &amp; docs</li>' + code.map(codeHitHtml).join('');
+      if (arts.length)
+        html += '<li class="hit-group">SDLC artifacts</li>' + arts.map(artifactHitHtml).join('');
+    }
+
+    if (count === 0) {
       status.textContent = `No matches for "${query}"`;
       return;
     }
-    status.textContent = `${hits.length} hit${hits.length === 1 ? '' : 's'} for "${query}"`;
-    list.innerHTML = hits
-      .map((h) => {
-        const tags = [
-          h.symbol ? `<code>${escape(h.symbol)}</code>` : '',
-          `<span class="lang-pill">${escape(h.language)}</span>`,
-          `<span class="muted">${escape(h.chunk_type)}</span>`,
-          `<span class="score">${h.score.toFixed(3)}</span>`,
-        ]
-          .filter(Boolean)
-          .join('');
-        return `
-          <li>
-            <div class="meta">
-              <span class="file">${escape(h.project)} · ${escape(h.file_path)}:${h.start_line}-${h.end_line}</span>
-              ${tags}
-            </div>
-            <pre>${escape(h.content)}</pre>
-          </li>
-        `;
-      })
-      .join('');
+    status.textContent = `${count} result${count === 1 ? '' : 's'} for "${query}"`;
+    list.innerHTML = html;
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
   }
-});
+}
 
-// ----- SDLC view ------------------------------------------------------------
-
-$('sdlc-form').addEventListener('submit', async (e) => {
+$('search-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const query = $('sdlc-input').value.trim();
-  const kind = $('sdlc-kind').value;
-  if (!query) return;
-  const list = $('sdlc-results');
-  const status = $('sdlc-status');
-  list.innerHTML = '';
-  status.textContent = 'Searching…';
-  try {
-    const body = { query, limit: 20 };
-    if (kind) body.kind = kind;
-    const hits = await api('/api/sdlc/search', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (hits.length === 0) {
-      status.textContent = `No artifacts match "${query}"`;
-      return;
-    }
-    status.textContent = `${hits.length} artifact${hits.length === 1 ? '' : 's'} for "${query}"`;
-    list.innerHTML = hits
-      .map((h) => {
-        const tags = [
-          `<span class="lang-pill">${escape(h.kind)}</span>`,
-          h.status ? `<span class="muted">${escape(h.status)}</span>` : '',
-          `<span class="muted small">${escape(h.project)} · ${escape(h.source)}</span>`,
-          `<span class="score">${h.score.toFixed(3)}</span>`,
-        ]
-          .filter(Boolean)
-          .join('');
-        return `
-          <li>
-            <div class="meta">
-              <span class="file"><code>${escape(h.artifact_id)}</code> ${escape(h.title)}</span>
-              ${tags}
-            </div>
-            <pre>${escape(h.excerpt)}</pre>
-          </li>
-        `;
-      })
-      .join('');
-  } catch (err) {
-    status.textContent = `Error: ${err.message}`;
-  }
+  void doSearch();
+});
+// Re-run when the scope changes if there's already a query, for quick pivoting.
+$('search-scope').addEventListener('change', () => {
+  if ($('search-input').value.trim()) void doSearch();
 });
 
 // ----- Analysis view --------------------------------------------------------

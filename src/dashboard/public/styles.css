@@ -1005,3 +1005,131 @@ details.raw summary:hover {
   display: inline-block;
   border: 2px solid var(--accent);
 }
+
+/* ---------- Simplified nav: grouped sections ---------- */
+
+.nav-group {
+  margin-bottom: 14px;
+}
+.nav-group-label {
+  display: block;
+  padding: 4px 16px 4px 24px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+@media (max-width: 720px) {
+  .nav-group {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+  .nav-group-label {
+    display: none;
+  }
+}
+
+/* ---------- Advanced disclosures ---------- */
+
+details.advanced {
+  margin-top: 6px;
+}
+details.advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  list-style: none;
+  padding: 6px 0;
+  user-select: none;
+}
+details.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+details.advanced > summary::before {
+  content: '▸ ';
+  color: var(--text-faint);
+}
+details.advanced[open] > summary::before {
+  content: '▾ ';
+}
+details.advanced[open] > summary {
+  margin-bottom: 8px;
+}
+/* When the disclosure is itself a card (Backup advanced). */
+details.advanced.card.section > summary {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ---------- Home landing ---------- */
+
+.home-search {
+  margin-bottom: 22px;
+}
+.home-search input[type='text'] {
+  font-size: 15px;
+  padding: 11px 14px;
+}
+.home-projects-h {
+  margin: 26px 0 10px;
+}
+
+.attn-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.attn-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  color: var(--text);
+}
+.attn-tile:hover {
+  text-decoration: none;
+  border-color: var(--border-strong);
+}
+.attn-num {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+.attn-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.attn-tile.attn-high .attn-num {
+  color: var(--bad);
+}
+.attn-tile.attn-warn .attn-num {
+  color: var(--warn);
+}
+.attn-tile.attn-ok .attn-num {
+  color: var(--text-faint);
+}
+
+/* ---------- Search result group separators ---------- */
+
+.hits .hit-group {
+  list-style: none;
+  margin: 14px 0 6px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  border: 0;
+  background: none;
+}
+.hits .hit-group:first-child {
+  margin-top: 0;
+}

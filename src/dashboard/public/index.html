@@ -18,7 +18,7 @@
   </head>
   <body>
     <header class="topbar">
-      <a href="#projects" class="brand" aria-label="Ragolith dashboard home">
+      <a href="#home" class="brand" aria-label="Ragolith dashboard home">
         <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-text">ragolith</span>
         <span class="brand-suffix">dashboard</span>
@@ -38,38 +38,40 @@
     <div class="layout">
       <aside class="sidebar" aria-label="Primary navigation">
         <nav>
-          <a href="#projects" class="navlink" data-route="projects">
-            <span class="navlink-bullet"></span>
-            <span>Projects</span>
-          </a>
-          <a href="#search" class="navlink" data-route="search">
-            <span class="navlink-bullet"></span>
-            <span>Search</span>
-          </a>
-          <a href="#sdlc" class="navlink" data-route="sdlc">
-            <span class="navlink-bullet"></span>
-            <span>SDLC</span>
-          </a>
-          <a href="#analysis" class="navlink" data-route="analysis">
-            <span class="navlink-bullet"></span>
-            <span>Analysis</span>
-          </a>
-          <a href="#ingest" class="navlink" data-route="ingest">
-            <span class="navlink-bullet"></span>
-            <span>Ingest</span>
-          </a>
-          <a href="#backup" class="navlink" data-route="backup">
-            <span class="navlink-bullet"></span>
-            <span>Backup</span>
-          </a>
-          <a href="#config" class="navlink" data-route="config">
-            <span class="navlink-bullet"></span>
-            <span>Config</span>
-          </a>
-          <a href="#health" class="navlink" data-route="health">
-            <span class="navlink-bullet"></span>
-            <span>Health</span>
-          </a>
+          <div class="nav-group">
+            <span class="nav-group-label">Explore</span>
+            <a href="#home" class="navlink" data-route="home">
+              <span class="navlink-bullet"></span>
+              <span>Home</span>
+            </a>
+            <a href="#search" class="navlink" data-route="search">
+              <span class="navlink-bullet"></span>
+              <span>Search</span>
+            </a>
+            <a href="#analysis" class="navlink" data-route="analysis">
+              <span class="navlink-bullet"></span>
+              <span>Analysis</span>
+            </a>
+          </div>
+          <div class="nav-group">
+            <span class="nav-group-label">Manage</span>
+            <a href="#ingest" class="navlink" data-route="ingest">
+              <span class="navlink-bullet"></span>
+              <span>Ingest</span>
+            </a>
+            <a href="#backup" class="navlink" data-route="backup">
+              <span class="navlink-bullet"></span>
+              <span>Backup</span>
+            </a>
+            <a href="#config" class="navlink" data-route="config">
+              <span class="navlink-bullet"></span>
+              <span>Config</span>
+            </a>
+            <a href="#health" class="navlink" data-route="health">
+              <span class="navlink-bullet"></span>
+              <span>Health</span>
+            </a>
+          </div>
         </nav>
         <div class="sidebar-foot">
           <span class="muted">v0.1 · localhost only</span>
@@ -88,15 +90,36 @@
           <a href="#config" class="btn btn-primary btn-sm">Start setup →</a>
         </div>
 
-        <!-- Projects -->
-        <section id="view-projects" class="view" hidden>
+        <!-- Home -->
+        <section id="view-home" class="view" hidden>
           <header class="view-head">
-            <h1>Projects</h1>
-            <p class="lead">Everything currently indexed.</p>
+            <h1>ragolith</h1>
+            <p class="lead">Search your code and SDLC, and see what needs attention.</p>
           </header>
+
+          <form id="home-search-form" class="search-form home-search">
+            <input
+              id="home-search-input"
+              type="text"
+              placeholder="Search everything — code, docs, requirements, decisions…"
+              autocomplete="off"
+              required
+            />
+            <button type="submit" class="btn btn-primary">Search</button>
+          </form>
+
+          <div class="card section" id="home-attention-card">
+            <h2 class="section-h">
+              <span>Needs attention</span>
+              <a href="#analysis" class="muted small">full analysis →</a>
+            </h2>
+            <div id="home-attention"><span class="muted small">Loading…</span></div>
+          </div>
+
+          <h2 class="section-h home-projects-h">Projects</h2>
           <div class="empty" id="projects-empty" hidden>
-            No projects yet. Open <a href="#config">Config</a> to add one, or run
-            <code>ragolith-ingest</code> after editing <code>ragc.config.json</code>.
+            No projects indexed yet. Open <a href="#config">Config</a> to add a repo, then
+            <a href="#ingest">Ingest</a> it.
           </div>
           <div class="card" id="projects-card" hidden>
             <table id="projects-table">
@@ -116,11 +139,11 @@
           </div>
         </section>
 
-        <!-- Search -->
+        <!-- Search (unified: code, docs, and SDLC artifacts) -->
         <section id="view-search" class="view" hidden>
           <header class="view-head">
             <h1>Search</h1>
-            <p class="lead">Hybrid retrieval (BM25 + vector) with optional cross-encoder rerank.</p>
+            <p class="lead">One search across code, docs, and SDLC artifacts.</p>
           </header>
           <form id="search-form" class="search-form">
             <input
@@ -130,6 +153,12 @@
               autocomplete="off"
               required
             />
+            <select id="search-scope" aria-label="What to search">
+              <option value="everything">Everything</option>
+              <option value="code">Code</option>
+              <option value="docs">Docs</option>
+              <option value="sdlc">SDLC artifacts</option>
+            </select>
             <select id="search-project" aria-label="Project filter">
               <option value="">all projects</option>
             </select>
@@ -137,44 +166,6 @@
           </form>
           <p class="status" id="search-status"></p>
           <ol id="search-results" class="hits"></ol>
-        </section>
-
-        <!-- SDLC -->
-        <section id="view-sdlc" class="view" hidden>
-          <header class="view-head">
-            <h1>SDLC</h1>
-            <p class="lead">
-              Search requirements, decisions, tickets, tests, runbooks — everything indexed from
-              your <code>sdlc</code> sources.
-            </p>
-          </header>
-          <form id="sdlc-form" class="search-form">
-            <input
-              id="sdlc-input"
-              type="text"
-              placeholder="e.g. how do users reset their password"
-              autocomplete="off"
-              required
-            />
-            <select id="sdlc-kind" aria-label="Kind filter">
-              <option value="">all kinds</option>
-              <option value="requirement">requirement</option>
-              <option value="story">story</option>
-              <option value="epic">epic</option>
-              <option value="feature">feature</option>
-              <option value="decision">decision</option>
-              <option value="ticket">ticket</option>
-              <option value="risk">risk</option>
-              <option value="test_case">test_case</option>
-              <option value="runbook">runbook</option>
-              <option value="api_spec">api_spec</option>
-              <option value="design_doc">design_doc</option>
-              <option value="incident">incident</option>
-            </select>
-            <button type="submit" class="btn btn-primary">Search</button>
-          </form>
-          <p class="status" id="sdlc-status"></p>
-          <ol id="sdlc-results" class="hits"></ol>
         </section>
 
         <!-- Analysis -->
@@ -230,7 +221,7 @@
 
         <!-- Project detail -->
         <section id="view-project" class="view" hidden>
-          <a href="#projects" class="back-link">← back to projects</a>
+          <a href="#home" class="back-link">← back</a>
           <header class="view-head">
             <h1 id="project-title">project</h1>
             <p class="lead" id="project-meta"></p>
@@ -265,10 +256,6 @@
               <button type="button" id="ingest-run-all" class="btn btn-primary">
                 Index everything
               </button>
-              <label class="checkbox">
-                <input type="checkbox" id="ingest-full" />
-                <span>Force full rebuild</span>
-              </label>
             </div>
             <div class="run-row">
               <select id="ingest-project-pick" aria-label="Project to re-index">
@@ -278,14 +265,21 @@
                 Re-index project
               </button>
             </div>
-            <div class="run-row">
-              <button type="button" id="ingest-migrate" class="btn btn-ghost btn-sm">
-                Run schema migrations only
-              </button>
-              <span class="muted small">
-                Useful after pulling a ragolith update that bumps the schema version.
-              </span>
-            </div>
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <div class="run-row">
+                <label class="checkbox">
+                  <input type="checkbox" id="ingest-full" />
+                  <span>Force full rebuild (delete + re-index from scratch)</span>
+                </label>
+              </div>
+              <div class="run-row">
+                <button type="button" id="ingest-migrate" class="btn btn-ghost btn-sm">
+                  Run schema migrations only
+                </button>
+                <span class="muted small">After a ragolith update that bumps the schema.</span>
+              </div>
+            </details>
           </div>
 
           <div class="card section">
@@ -382,7 +376,9 @@
             </div>
           </div>
 
-          <div class="card section">
+          <details class="advanced card section">
+            <summary>Advanced — verify &amp; S3 transfer</summary>
+
             <h2 class="section-h">Verify</h2>
             <p class="muted small">
               Round-trips the current index through backup+restore against a throwaway id — a cheap
@@ -395,9 +391,7 @@
                 <span>Keep verify snapshot on disk</span>
               </label>
             </div>
-          </div>
 
-          <div class="card section">
             <h2 class="section-h">S3 transfer</h2>
             <p class="muted small">
               Push or pull an existing snapshot to/from S3. Requires the <code>aws</code> CLI on
@@ -413,7 +407,7 @@
                 Pull from S3
               </button>
             </div>
-          </div>
+          </details>
 
           <div class="card section">
             <h2 class="section-h">
@@ -488,32 +482,35 @@
                   <span class="effort-sub">fewest · shortest</span>
                 </button>
               </div>
-
-              <div class="slider-row">
-                <label for="cfg-search-limit">Results returned</label>
-                <input type="range" id="cfg-search-limit" min="1" max="50" step="1" />
-                <output id="cfg-search-limit-val"></output>
-              </div>
-              <div class="slider-row">
-                <label for="cfg-search-maxchars">Max content chars / hit</label>
-                <input type="range" id="cfg-search-maxchars" min="0" max="6000" step="100" />
-                <output id="cfg-search-maxchars-val"></output>
-              </div>
-              <div class="slider-row">
-                <label for="cfg-search-overfetch">Over-fetch ×</label>
-                <input type="range" id="cfg-search-overfetch" min="1" max="5" step="1" />
-                <output id="cfg-search-overfetch-val"></output>
-              </div>
-              <div class="slider-row">
-                <label for="cfg-search-diversity">Max hits / file</label>
-                <input type="range" id="cfg-search-diversity" min="1" max="10" step="1" />
-                <output id="cfg-search-diversity-val"></output>
-              </div>
-              <label class="checkbox">
-                <input type="checkbox" id="cfg-search-reranker" />
-                <span>Cross-encoder reranker (better relevance; more local compute)</span>
-              </label>
               <p class="muted small" id="cfg-search-estimate"></p>
+
+              <details class="advanced">
+                <summary>Fine-tune knobs</summary>
+                <div class="slider-row">
+                  <label for="cfg-search-limit">Results returned</label>
+                  <input type="range" id="cfg-search-limit" min="1" max="50" step="1" />
+                  <output id="cfg-search-limit-val"></output>
+                </div>
+                <div class="slider-row">
+                  <label for="cfg-search-maxchars">Max content chars / hit</label>
+                  <input type="range" id="cfg-search-maxchars" min="0" max="6000" step="100" />
+                  <output id="cfg-search-maxchars-val"></output>
+                </div>
+                <div class="slider-row">
+                  <label for="cfg-search-overfetch">Over-fetch ×</label>
+                  <input type="range" id="cfg-search-overfetch" min="1" max="5" step="1" />
+                  <output id="cfg-search-overfetch-val"></output>
+                </div>
+                <div class="slider-row">
+                  <label for="cfg-search-diversity">Max hits / file</label>
+                  <input type="range" id="cfg-search-diversity" min="1" max="10" step="1" />
+                  <output id="cfg-search-diversity-val"></output>
+                </div>
+                <label class="checkbox">
+                  <input type="checkbox" id="cfg-search-reranker" />
+                  <span>Cross-encoder reranker (better relevance; more local compute)</span>
+                </label>
+              </details>
             </div>
 
             <div class="card section">
