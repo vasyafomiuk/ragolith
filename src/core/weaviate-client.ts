@@ -1,11 +1,13 @@
 // Weaviate connection + collection schema management.
 //
-// Three collections:
+// Four collections:
 //   - CodeChunk    — vectorized code/doc chunks; the primary search target.
 //   - SymbolRecord — function/class/method index for structural lookups.
 //   - CallEdge     — caller→callee edges (TS/JS only) for call-graph queries.
+//   - ProjectStack — per-project detected tech stack (frameworks, runtimes).
 
 import weaviate, {
+  generateUuid5,
   type WeaviateClient,
   dataType,
   vectorizer,
@@ -13,11 +15,12 @@ import weaviate, {
   configure,
   Filters,
 } from 'weaviate-client';
-import type { WeaviateConnConfig } from './types.js';
+import type { TechStack, WeaviateConnConfig } from './types.js';
 
 export const CODE_CHUNK = 'CodeChunk';
 export const SYMBOL_RECORD = 'SymbolRecord';
 export const CALL_EDGE = 'CallEdge';
+export const PROJECT_STACK = 'ProjectStack';
 
 export async function connect(cfg: WeaviateConnConfig): Promise<WeaviateClient> {
   return weaviate.connectToCustom({
@@ -119,11 +122,100 @@ export async function ensureSchema(
       ],
     });
   }
+
+  if (!existing.has(PROJECT_STACK)) {
+    await client.collections.create({
+      name: PROJECT_STACK,
+      // One row per project; no vectors. Flat scalar/array fields are
+      // filterable so future search tools can ask "all projects with React".
+      // The rich structure (frameworks[], manifests[], runtimes map) lives
+      // inside *_json TEXT blobs so the schema doesn't have to keep up with
+      // nested-object shape changes.
+      vectorizers: vectorizer.none(),
+      properties: [
+        { name: 'project', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'languages', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'build_tools', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'framework_names', dataType: dataType.TEXT_ARRAY, skipVectorization: true },
+        { name: 'runtimes_json', dataType: dataType.TEXT, skipVectorization: true },
+        { name: 'frameworks_json', dataType: dataType.TEXT, skipVectorization: true },
+        { name: 'manifests_json', dataType: dataType.TEXT, skipVectorization: true },
+        { name: 'detected_at', dataType: dataType.TEXT, tokenization: 'field' },
+        { name: 'commit_sha', dataType: dataType.TEXT, tokenization: 'field' },
+      ],
+    });
+  }
+}
+
+/**
+ * Upsert the TechStack for one project. Delete-then-insert pattern mirrors
+ * how the rest of the code re-ingests: deterministic UUID derived from the
+ * project name means the new row replaces the old one cleanly.
+ */
+export async function upsertTechStack(client: WeaviateClient, stack: TechStack): Promise<void> {
+  const col = client.collections.get(PROJECT_STACK);
+  await col.data.deleteMany(col.filter.byProperty('project').equal(stack.project));
+  await col.data.insertMany([
+    {
+      id: generateUuid5(`stack::${stack.project}`),
+      properties: {
+        project: stack.project,
+        languages: stack.languages,
+        build_tools: stack.build_tools,
+        framework_names: stack.frameworks.map((f) => f.name),
+        runtimes_json: JSON.stringify(stack.runtimes),
+        frameworks_json: JSON.stringify(stack.frameworks),
+        manifests_json: JSON.stringify(stack.manifests),
+        detected_at: stack.detected_at,
+        commit_sha: stack.commit_sha ?? '',
+      },
+    },
+  ]);
+}
+
+/**
+ * Read the TechStack for one project. Returns `undefined` when nothing has
+ * been ingested for that project name yet — distinguishable from "an empty
+ * stack was detected" (which returns a record with empty arrays).
+ */
+export async function getTechStack(
+  client: WeaviateClient,
+  project: string,
+): Promise<TechStack | undefined> {
+  const col = client.collections.get(PROJECT_STACK);
+  const res = await col.query.fetchObjects({
+    filters: col.filter.byProperty('project').equal(project),
+    limit: 1,
+  });
+  const obj = res.objects[0];
+  if (!obj) return undefined;
+  const p = obj.properties as Record<string, unknown>;
+  const stack: TechStack = {
+    project: String(p['project'] ?? project),
+    languages: (p['languages'] as string[] | undefined) ?? [],
+    build_tools: (p['build_tools'] as TechStack['build_tools'] | undefined) ?? [],
+    runtimes: safeParseJson<Record<string, string>>(p['runtimes_json']) ?? {},
+    frameworks: safeParseJson<TechStack['frameworks']>(p['frameworks_json']) ?? [],
+    manifests: safeParseJson<TechStack['manifests']>(p['manifests_json']) ?? [],
+    detected_at: String(p['detected_at'] ?? ''),
+  };
+  const sha = String(p['commit_sha'] ?? '');
+  if (sha) stack.commit_sha = sha;
+  return stack;
+}
+
+function safeParseJson<T>(raw: unknown): T | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Delete all objects belonging to a project — used before re-ingesting on a full rebuild. */
 export async function deleteProject(client: WeaviateClient, project: string): Promise<void> {
-  for (const name of [CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE]) {
+  for (const name of [CODE_CHUNK, SYMBOL_RECORD, CALL_EDGE, PROJECT_STACK]) {
     const col = client.collections.get(name);
     await col.data.deleteMany(col.filter.byProperty('project').equal(project));
   }

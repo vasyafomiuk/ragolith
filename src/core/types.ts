@@ -191,3 +191,44 @@ export interface IngestState {
   projects: Record<string, { commit_sha: string; updated_at: string }>;
   files: Record<string, { mtime_ms: number; updated_at: string }>;
 }
+
+/** The kind of manifest file a dependency entry came from. */
+export type ManifestType = 'npm' | 'maven' | 'gradle' | 'pip' | 'poetry' | 'nuget';
+
+/**
+ * One detected framework / library — the curated, opinionated subset of a
+ * project's dependencies (Spring Boot, React, Django, etc.). The `source`
+ * field points at the manifest file the entry came from, so an LLM can tell
+ * which subPath / build unit owns it in a monorepo.
+ */
+export interface DetectedFramework {
+  name: string;
+  version: string;
+  source: string;
+}
+
+/**
+ * The project-level tech-stack record, persisted to the ProjectStack
+ * Weaviate collection and surfaced verbatim by the `tech_stack` MCP tool.
+ *
+ * Detection happens during ingest by parsing manifests (package.json,
+ * pom.xml, build.gradle[.kts], requirements.txt, pyproject.toml, *.csproj)
+ * at the repo root and in each declared subPath.
+ */
+export interface TechStack {
+  project: string;
+  /** Languages observed across all manifests, e.g. ['java', 'kotlin']. */
+  languages: string[];
+  /** Build / package tools, e.g. ['maven', 'gradle']. */
+  build_tools: ManifestType[];
+  /** Runtime version constraints declared by the project, e.g. { java: '17', node: '>=20' }. */
+  runtimes: Record<string, string>;
+  /** Curated frameworks (Spring Boot, React, Django, ...) detected via allowlist. */
+  frameworks: DetectedFramework[];
+  /** Every manifest the scanner successfully read, for traceability. */
+  manifests: { path: string; type: ManifestType }[];
+  /** ISO timestamp of detection. */
+  detected_at: string;
+  /** Commit SHA the detection was performed against, if available. */
+  commit_sha?: string;
+}

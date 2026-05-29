@@ -27,6 +27,7 @@ import {
   ensureSchema,
   deleteFiles,
   deleteProject,
+  upsertTechStack,
   CODE_CHUNK,
   SYMBOL_RECORD,
   CALL_EDGE,
@@ -36,6 +37,7 @@ import { detectLanguage, readSourceFile } from '../core/file-reader.js';
 import { applyProjectPrefix, pickChunker } from '../core/chunkers/index.js';
 import { createProgress } from '../core/progress.js';
 import { runMigrations } from '../core/migrations.js';
+import { detectTechStack } from '../core/manifest-scan.js';
 import type { ChunkResult, IngestState, ProjectConfig, FileConfig } from '../core/types.js';
 
 // `ignore` is published as CJS with `export default ignore` in its .d.ts.
@@ -213,6 +215,29 @@ async function ingestProject(
 ): Promise<void> {
   process.stderr.write(`[ingest] project: ${project.name}\n`);
   const handle = await syncRepo(workDir, project);
+
+  // Tech-stack detection runs on every ingest (full or incremental) — it's
+  // cheap (a few manifest reads) and the result needs to track the current
+  // commit, not the previous one. Best-effort: a manifest parse failure or
+  // a Weaviate hiccup here must not block the actual code ingest.
+  try {
+    const stack = await detectTechStack(handle.path, project.subPaths, project.name, handle.head);
+    await upsertTechStack(client, stack);
+    const summary =
+      stack.frameworks.length > 0
+        ? `${stack.frameworks.length} framework(s): ${stack.frameworks
+            .slice(0, 4)
+            .map((f) => f.name)
+            .join(', ')}${stack.frameworks.length > 4 ? '…' : ''}`
+        : 'no recognized frameworks';
+    process.stderr.write(
+      `[ingest]   tech stack: [${stack.languages.join(', ') || 'no manifests'}] — ${summary}\n`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[ingest]   tech stack detection skipped: ${msg}\n`);
+  }
+
   const previous = state.projects[project.name];
   const incremental = !forceFull && previous?.commit_sha && previous.commit_sha !== handle.head;
 

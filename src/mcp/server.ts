@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server — exposes ragolith's index as 10 tools over stdio JSON-RPC.
+// MCP server — exposes ragolith's index as 11 tools over stdio JSON-RPC.
 //
 // Designed to be spawned as a child process by an MCP-aware LLM client
 // (Claude Desktop, Cursor, etc.). Reads config the same way the CLIs do.
@@ -14,6 +14,7 @@ import { loadConfig } from '../core/config.js';
 import {
   connect,
   ensureSchema,
+  getTechStack,
   CODE_CHUNK,
   SYMBOL_RECORD,
   CALL_EDGE,
@@ -253,7 +254,23 @@ async function makeServer(client: WeaviateClient): Promise<McpServer> {
     },
   );
 
-  // 10. list_files — distinct files indexed for a project (or all).
+  // 10. tech_stack — detected frameworks / runtimes / build tools per project.
+  server.tool(
+    'tech_stack',
+    'Return the detected tech stack for a project — frameworks (e.g. Spring Boot, React), runtime versions (Java, Node, Python), build tools, and the manifests they were derived from. Useful for grounding modernization or upgrade questions.',
+    {
+      project: z.string().describe('Project name as listed by list_projects'),
+    },
+    async ({ project }) => {
+      const stack = await getTechStack(client, project);
+      if (!stack) {
+        return jsonResult({ project, error: 'no tech stack on file — has this project been ingested?' });
+      }
+      return jsonResult(stack);
+    },
+  );
+
+  // 11. list_files — distinct files indexed for a project (or all).
   server.tool(
     'list_files',
     'List distinct file paths indexed under a project (or across all projects).',

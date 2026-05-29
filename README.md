@@ -19,7 +19,7 @@ A RAG pipeline that indexes git repositories and documents into Weaviate, then e
 
 - **Ingest** — clones git repos, walks files (respecting `.gitignore`), reads PDF/DOCX, dispatches to language-specific chunkers, and batch-inserts into Weaviate.
 - **Search** — hybrid (BM25 + vector) + cross-encoder rerank, classified alpha, autocut, diversity filter.
-- **Serve** — an MCP server over stdio that exposes ~10 tools (search, find symbol, file structure, callers/callees, etc.) for any MCP-aware LLM client.
+- **Serve** — an MCP server over stdio that exposes ~11 tools (search, find symbol, file structure, callers/callees, tech stack, etc.) for any MCP-aware LLM client.
 - **Dashboard** — a localhost web UI (`ragolith-dashboard`) to browse indexed projects, run queries, edit `ragc.config.json`, kick off ingest/backup jobs with live progress, and check stack health.
 - **Backup** — Weaviate filesystem backups with optional S3 push/pull.
 
@@ -56,8 +56,9 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 | Component        | File                                  | Role                                                                            |
 | ---------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
-| MCP Server       | `src/mcp/server.ts`                   | 10 search/structure tools exposed to LLM clients                                |
+| MCP Server       | `src/mcp/server.ts`                   | 11 search/structure tools exposed to LLM clients                                |
 | Dashboard        | `src/dashboard/server.ts`             | Localhost web UI: browse projects, run searches, check stack health             |
+| Manifest Scanner | `src/core/manifest-scan.ts`           | Detects frameworks + runtime versions from package.json / pom.xml / gradle / pyproject / requirements / csproj |
 | Ingest CLI       | `src/cli/ingest.ts`                   | Clones repos, walks files, chunks, writes to Weaviate                           |
 | Backup CLI       | `src/cli/backup.ts`                   | Weaviate backup/restore + S3 push/pull                                          |
 | AST Chunker      | `src/core/chunkers/ast-chunker.ts`    | TS/JS: splits at function/class boundaries, extracts symbols + call edges       |
@@ -78,6 +79,7 @@ All embeddings and reranking run locally in Docker — no external API keys need
 - **CodeChunk** — vectorized code/doc chunks with `file_path`, `project`, `lines`, `language`, `chunk_type`.
 - **SymbolRecord** — function/class/method index with `name`, `kind`, `signature`, `parent`, `exports`.
 - **CallEdge** — `caller → callee` edges with `call_type`, `file`, `line` (TS/JS only).
+- **ProjectStack** — one row per project: detected `languages[]`, `build_tools[]`, `framework_names[]`, plus rich `frameworks_json` / `runtimes_json` / `manifests_json` blobs. Powers the `tech_stack` MCP tool.
 
 ## Search pipeline
 
@@ -92,12 +94,13 @@ All embeddings and reranking run locally in Docker — no external API keys need
 
 1. Load config (`repos[]` for git repositories, `documents[]` for standalone files; legacy `projects`/`files` keys still accepted).
 2. Clone/fetch repos via Git Manager.
-3. Detect incremental vs full (`git diff` since last SHA).
-4. Walk files respecting `.gitignore` + extension filters.
-5. Dispatch to language-specific chunker.
-6. Prepend project context prefix to chunks.
-7. Batch insert chunks/edges into Weaviate.
-8. Record ingested commit SHA to `data.json`.
+3. Detect tech stack (manifests at repo root + `subPaths`) → upsert `ProjectStack`.
+4. Detect incremental vs full (`git diff` since last SHA).
+5. Walk files respecting `.gitignore` + extension filters.
+6. Dispatch to language-specific chunker.
+7. Prepend project context prefix to chunks.
+8. Batch insert chunks/edges into Weaviate.
+9. Record ingested commit SHA to `data.json`.
 
 ## Key design decisions
 
