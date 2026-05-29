@@ -67,7 +67,17 @@ function applySetupBanner() {
 
 // ----- routing --------------------------------------------------------------
 
-const VIEWS = ['projects', 'search', 'project', 'ingest', 'backup', 'config', 'health'];
+const VIEWS = [
+  'projects',
+  'search',
+  'sdlc',
+  'analysis',
+  'project',
+  'ingest',
+  'backup',
+  'config',
+  'health',
+];
 
 function showView(view) {
   for (const v of VIEWS) {
@@ -104,6 +114,15 @@ async function route() {
   if (hash === 'search') {
     showView('search');
     await ensureProjectFilter();
+    return;
+  }
+  if (hash === 'sdlc') {
+    showView('sdlc');
+    return;
+  }
+  if (hash === 'analysis') {
+    showView('analysis');
+    await ensureAnalysisProjectFilter();
     return;
   }
   if (hash === 'ingest') {
@@ -356,6 +375,210 @@ $('search-form').addEventListener('submit', async (e) => {
       .join('');
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
+  }
+});
+
+// ----- SDLC view ------------------------------------------------------------
+
+$('sdlc-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const query = $('sdlc-input').value.trim();
+  const kind = $('sdlc-kind').value;
+  if (!query) return;
+  const list = $('sdlc-results');
+  const status = $('sdlc-status');
+  list.innerHTML = '';
+  status.textContent = 'Searching…';
+  try {
+    const body = { query, limit: 20 };
+    if (kind) body.kind = kind;
+    const hits = await api('/api/sdlc/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (hits.length === 0) {
+      status.textContent = `No artifacts match "${query}"`;
+      return;
+    }
+    status.textContent = `${hits.length} artifact${hits.length === 1 ? '' : 's'} for "${query}"`;
+    list.innerHTML = hits
+      .map((h) => {
+        const tags = [
+          `<span class="lang-pill">${escape(h.kind)}</span>`,
+          h.status ? `<span class="muted">${escape(h.status)}</span>` : '',
+          `<span class="muted small">${escape(h.project)} · ${escape(h.source)}</span>`,
+          `<span class="score">${h.score.toFixed(3)}</span>`,
+        ]
+          .filter(Boolean)
+          .join('');
+        return `
+          <li>
+            <div class="meta">
+              <span class="file"><code>${escape(h.artifact_id)}</code> ${escape(h.title)}</span>
+              ${tags}
+            </div>
+            <pre>${escape(h.excerpt)}</pre>
+          </li>
+        `;
+      })
+      .join('');
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
+});
+
+// ----- Analysis view --------------------------------------------------------
+
+let analysisProjectFilled = false;
+async function ensureAnalysisProjectFilter() {
+  if (analysisProjectFilled) return;
+  try {
+    const projects = await api('/api/projects');
+    const sel = $('analysis-project');
+    for (const p of projects) {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+    analysisProjectFilled = true;
+  } catch {
+    // empty filter is fine
+  }
+}
+
+const SEV_CLASS = { high: 'badge-failed', warning: 'badge-running', info: 'badge-idle' };
+
+function sevBadge(sev) {
+  const cls = SEV_CLASS[sev] ?? 'badge-idle';
+  return `<span class="badge ${cls}">${escape(sev)}</span>`;
+}
+
+$('analysis-run-gaps').addEventListener('click', async () => {
+  const out = $('analysis-gaps-out');
+  const project = $('analysis-project').value;
+  out.innerHTML = '<span class="muted small">Analyzing…</span>';
+  try {
+    const r = await api(
+      '/api/analysis/gaps' + (project ? `?project=${encodeURIComponent(project)}` : ''),
+    );
+    if (r.gaps.length === 0) {
+      out.innerHTML = `<span class="ok-text">No gaps found across ${r.totals.artifacts} artifacts.</span>`;
+      return;
+    }
+    const c = r.counts;
+    const summary = `<p class="muted small">${c.unimplemented_requirement} unimplemented · ${c.untested_requirement} untested · ${c.unimplemented_decision} unbuilt decision · ${c.orphan_test} orphan test · ${c.dangling_link} dangling — over ${r.totals.artifacts} artifacts</p>`;
+    const rows = r.gaps
+      .map(
+        (g) => `
+          <tr>
+            <td>${sevBadge(g.severity)}</td>
+            <td>${escape(g.kind.replace(/_/g, ' '))}</td>
+            <td><code>${escape(g.artifact_id)}</code> ${escape(g.title)}<div class="muted small">${escape(g.detail)}</div></td>
+          </tr>`,
+      )
+      .join('');
+    out.innerHTML = summary + `<table class="analysis-table"><tbody>${rows}</tbody></table>`;
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
+  }
+});
+
+$('analysis-run-mod').addEventListener('click', async () => {
+  const out = $('analysis-mod-out');
+  const project = $('analysis-project').value;
+  out.innerHTML = '<span class="muted small">Analyzing…</span>';
+  try {
+    const reports = await api(
+      '/api/analysis/modernization' + (project ? `?project=${encodeURIComponent(project)}` : ''),
+    );
+    const withFindings = reports.filter((r) => r.findings.length > 0);
+    if (withFindings.length === 0) {
+      out.innerHTML = `<span class="ok-text">No modernization findings across ${reports.length} project(s).</span>`;
+      return;
+    }
+    out.innerHTML = withFindings
+      .map((r) => {
+        const rows = r.findings
+          .map(
+            (f) => `
+              <tr>
+                <td>${sevBadge(f.severity)}</td>
+                <td><code>${escape(f.subject)}</code> ${escape(f.version)}</td>
+                <td>${escape(f.finding)}<div class="muted small">→ ${escape(f.recommendation)}</div></td>
+              </tr>`,
+          )
+          .join('');
+        return `<h3 class="analysis-sub">${escape(r.project)}</h3><table class="analysis-table"><tbody>${rows}</tbody></table>`;
+      })
+      .join('');
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
+  }
+});
+
+$('analysis-run-dec').addEventListener('click', async () => {
+  const out = $('analysis-dec-out');
+  const project = $('analysis-project').value;
+  if (!project) {
+    out.innerHTML =
+      '<span class="err-text">Pick a project first — decomposition is per-project.</span>';
+    return;
+  }
+  out.innerHTML = '<span class="muted small">Analyzing…</span>';
+  try {
+    const r = await api(`/api/analysis/decomposition?project=${encodeURIComponent(project)}`);
+    if (r.error) {
+      out.innerHTML = `<span class="err-text">${escape(r.error)}</span>`;
+      return;
+    }
+    const moduleRows = r.modules
+      .slice(0, 25)
+      .map(
+        (m) => `
+          <tr>
+            <td><code>${escape(m.module)}</code></td>
+            <td class="num">${m.files}</td>
+            <td class="num">${m.cohesion.toFixed(2)}</td>
+            <td class="num">${m.instability.toFixed(2)}</td>
+            <td class="num">${m.fanIn}</td>
+            <td class="num">${m.fanOut}</td>
+          </tr>`,
+      )
+      .join('');
+    const seams =
+      r.seams.length > 0
+        ? '<h3 class="analysis-sub">Suggested seams</h3><ul class="seam-list">' +
+          r.seams
+            .map(
+              (s) =>
+                `<li>◆ <code>${escape(s.module)}</code> <span class="muted small">(${s.files} files) — ${escape(s.rationale)}</span></li>`,
+            )
+            .join('') +
+          '</ul>'
+        : '<p class="muted small">No clear seams — modules are too small or too coupled.</p>';
+    const couplings =
+      r.couplings.length > 0
+        ? '<h3 class="analysis-sub">Tightest couplings</h3><ul class="seam-list">' +
+          r.couplings
+            .slice(0, 8)
+            .map(
+              (c) =>
+                `<li><span class="score">${c.calls}</span> calls — <code>${escape(c.a)}</code> ↔ <code>${escape(c.b)}</code></li>`,
+            )
+            .join('') +
+          '</ul>'
+        : '';
+    out.innerHTML =
+      `<p class="muted small">${r.totals.modules} modules · ${r.totals.crossModuleCalls} cross-module calls · ${r.seams.length} seam(s)</p>` +
+      '<table class="analysis-table"><thead><tr><th>module</th><th class="num">files</th><th class="num">cohesion</th><th class="num">instability</th><th class="num">fanIn</th><th class="num">fanOut</th></tr></thead><tbody>' +
+      moduleRows +
+      '</tbody></table>' +
+      seams +
+      couplings;
+  } catch (err) {
+    out.innerHTML = `<span class="err-text">Error: ${escape(err.message)}</span>`;
   }
 });
 

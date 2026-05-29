@@ -15,11 +15,29 @@ import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { WeaviateClient } from 'weaviate-client';
 import { configFilePath, loadConfig, resetConfigCache } from '../core/config.js';
-import { connect, CODE_CHUNK } from '../core/weaviate-client.js';
-import { search } from '../core/search.js';
+import {
+  connect,
+  fetchDecompositionInputs,
+  getTechStack,
+  listArtifacts,
+  listProjectStacks,
+  CODE_CHUNK,
+} from '../core/weaviate-client.js';
+import { search, searchArtifacts } from '../core/search.js';
+import { analyzeGaps, type GapReport } from '../core/analysis/gaps.js';
+import { analyzeModernization, type ModernizationReport } from '../core/analysis/modernization.js';
+import { decomposeProject, type DecompositionReport } from '../core/analysis/decomposition.js';
 import { health as coreHealth, type HealthStatus } from '../core/health.js';
 import { loadRegistry, type SnapshotRecord } from '../core/backups-registry.js';
-import type { IngestState, Language, RagolithConfig, SearchHit } from '../core/types.js';
+import type {
+  ArtifactHit,
+  IngestState,
+  Language,
+  RagolithConfig,
+  SdlcArtifact,
+  SdlcArtifactKind,
+  SearchHit,
+} from '../core/types.js';
 
 export type { HealthStatus };
 
@@ -163,6 +181,80 @@ export async function runSearch(req: SearchRequest): Promise<SearchHit[]> {
     diversityPerFile: cfg.search.diversityPerFile,
     rerankerEnabled: cfg.search.rerankerEnabled,
   });
+}
+
+// --- SDLC artifacts + analysis --------------------------------------------
+
+export interface SdlcSearchRequest {
+  query: string;
+  limit?: number;
+  project?: string;
+  source?: string;
+  kind?: SdlcArtifactKind;
+}
+
+export async function runSdlcSearch(req: SdlcSearchRequest): Promise<ArtifactHit[]> {
+  const cfg = loadConfig();
+  const client = await getClient();
+  if (!client) return [];
+  return searchArtifacts(client, {
+    query: req.query,
+    limit: req.limit ?? 20,
+    ...(req.project ? { project: req.project } : {}),
+    ...(req.source ? { source: req.source } : {}),
+    ...(req.kind ? { kind: req.kind } : {}),
+    rerankerEnabled: cfg.search.rerankerEnabled,
+  });
+}
+
+/** Lightweight artifact inventory for the SDLC view's list mode. */
+export async function sdlcArtifacts(filter: {
+  project?: string;
+  kind?: string;
+  status?: string;
+}): Promise<SdlcArtifact[]> {
+  const client = await getClient();
+  if (!client) return [];
+  return listArtifacts(client, filter);
+}
+
+export async function gapAnalysis(project?: string): Promise<GapReport> {
+  const client = await getClient();
+  if (!client) return { gaps: [], counts: emptyGapCounts(), totals: { artifacts: 0, byKind: {} } };
+  const artifacts = await listArtifacts(client, project ? { project } : {});
+  return analyzeGaps(artifacts);
+}
+
+function emptyGapCounts(): GapReport['counts'] {
+  return {
+    unimplemented_requirement: 0,
+    untested_requirement: 0,
+    unimplemented_decision: 0,
+    orphan_test: 0,
+    dangling_link: 0,
+  };
+}
+
+export async function modernizationAnalysis(project?: string): Promise<ModernizationReport[]> {
+  const client = await getClient();
+  if (!client) return [];
+  const stacks = project
+    ? await (async () => {
+        const s = await getTechStack(client, project);
+        return s ? [s] : [];
+      })()
+    : await listProjectStacks(client);
+  return stacks.map((s) => analyzeModernization(s));
+}
+
+export async function decompositionAnalysis(
+  project: string,
+  depth?: number,
+): Promise<DecompositionReport | { error: string }> {
+  const client = await getClient();
+  if (!client) return { error: 'Weaviate unreachable' };
+  const inputs = await fetchDecompositionInputs(client, project);
+  return decomposeProject(project, inputs, { moduleDepth: depth ?? 1 });
 }
 
 export interface DeleteProjectResult {

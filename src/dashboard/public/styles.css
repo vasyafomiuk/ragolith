@@ -839,3 +839,48 @@ details.raw summary:hover {
 #config-status.err {
   color: var(--bad);
 }
+
+/* ---------- Analysis view ---------- */
+
+.analysis-out {
+  font-size: 13px;
+}
+.analysis-sub {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.analysis-table td,
+.analysis-table th {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.analysis-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  background: var(--bg-2);
+  text-align: left;
+}
+.analysis-table td:first-child {
+  white-space: nowrap;
+}
+.seam-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+.ok-text {
+  color: var(--ok);
+  font-weight: 500;
+}
+.err-text {
+  color: var(--bad);
+}

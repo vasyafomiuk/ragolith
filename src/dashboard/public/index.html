@@ -46,6 +46,14 @@
             <span class="navlink-bullet"></span>
             <span>Search</span>
           </a>
+          <a href="#sdlc" class="navlink" data-route="sdlc">
+            <span class="navlink-bullet"></span>
+            <span>SDLC</span>
+          </a>
+          <a href="#analysis" class="navlink" data-route="analysis">
+            <span class="navlink-bullet"></span>
+            <span>Analysis</span>
+          </a>
           <a href="#ingest" class="navlink" data-route="ingest">
             <span class="navlink-bullet"></span>
             <span>Ingest</span>
@@ -129,6 +137,95 @@
           </form>
           <p class="status" id="search-status"></p>
           <ol id="search-results" class="hits"></ol>
+        </section>
+
+        <!-- SDLC -->
+        <section id="view-sdlc" class="view" hidden>
+          <header class="view-head">
+            <h1>SDLC</h1>
+            <p class="lead">
+              Search requirements, decisions, tickets, tests, runbooks — everything indexed from
+              your <code>sdlc</code> sources.
+            </p>
+          </header>
+          <form id="sdlc-form" class="search-form">
+            <input
+              id="sdlc-input"
+              type="text"
+              placeholder="e.g. how do users reset their password"
+              autocomplete="off"
+              required
+            />
+            <select id="sdlc-kind" aria-label="Kind filter">
+              <option value="">all kinds</option>
+              <option value="requirement">requirement</option>
+              <option value="story">story</option>
+              <option value="epic">epic</option>
+              <option value="feature">feature</option>
+              <option value="decision">decision</option>
+              <option value="ticket">ticket</option>
+              <option value="risk">risk</option>
+              <option value="test_case">test_case</option>
+              <option value="runbook">runbook</option>
+              <option value="api_spec">api_spec</option>
+              <option value="design_doc">design_doc</option>
+              <option value="incident">incident</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Search</button>
+          </form>
+          <p class="status" id="sdlc-status"></p>
+          <ol id="sdlc-results" class="hits"></ol>
+        </section>
+
+        <!-- Analysis -->
+        <section id="view-analysis" class="view" hidden>
+          <header class="view-head">
+            <h1>Analysis</h1>
+            <p class="lead">
+              Find gaps, modernization targets, and microservice seams over the indexed graph.
+            </p>
+          </header>
+
+          <div class="run-row">
+            <select id="analysis-project" aria-label="Project filter">
+              <option value="">all projects</option>
+            </select>
+            <span class="muted small">Scopes gaps + modernization; decompose needs a project.</span>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Traceability gaps</span>
+              <button type="button" id="analysis-run-gaps" class="btn btn-ghost btn-sm">Run</button>
+            </h2>
+            <div id="analysis-gaps-out" class="analysis-out">
+              <span class="muted small">Run to find unimplemented / untested / untraced work.</span>
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Modernization</span>
+              <button type="button" id="analysis-run-mod" class="btn btn-ghost btn-sm">Run</button>
+            </h2>
+            <div id="analysis-mod-out" class="analysis-out">
+              <span class="muted small"
+                >Run to flag end-of-life / legacy runtimes + frameworks.</span
+              >
+            </div>
+          </div>
+
+          <div class="card section">
+            <h2 class="section-h">
+              <span>Decomposition</span>
+              <button type="button" id="analysis-run-dec" class="btn btn-ghost btn-sm">Run</button>
+            </h2>
+            <div id="analysis-dec-out" class="analysis-out">
+              <span class="muted small"
+                >Pick a project, then run to suggest microservice seams.</span
+              >
+            </div>
+          </div>
         </section>
 
         <!-- Project detail -->

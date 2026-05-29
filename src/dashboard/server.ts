@@ -33,20 +33,26 @@ import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 
 import {
+  decompositionAnalysis,
   deleteProject,
+  gapAnalysis,
   getActiveJob,
   health,
   listSnapshots,
+  modernizationAnalysis,
   projects,
   projectFiles,
   readConfig,
+  runSdlcSearch,
   runSearch,
+  sdlcArtifacts,
   startBackup,
   startIngest,
   subscribeJobs,
   writeConfig,
   type BackupOptions,
   type IngestOptions,
+  type SdlcSearchRequest,
   type SearchRequest,
 } from './api.js';
 
@@ -148,6 +154,54 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
           return;
         }
         sendJson(res, 200, await runSearch(body));
+        return;
+      }
+      if (method === 'POST' && url === '/api/sdlc/search') {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || '{}') as SdlcSearchRequest;
+        if (!body.query || typeof body.query !== 'string') {
+          sendJson(res, 400, { error: 'missing "query" string in body' });
+          return;
+        }
+        sendJson(res, 200, await runSdlcSearch(body));
+        return;
+      }
+      const artifactsMatch = /^\/api\/sdlc\/artifacts(\?.*)?$/.exec(url);
+      if (method === 'GET' && artifactsMatch) {
+        const q = new URL(url, 'http://localhost').searchParams;
+        const filter: { project?: string; kind?: string; status?: string } = {};
+        const project = q.get('project');
+        const kind = q.get('kind');
+        const status = q.get('status');
+        if (project) filter.project = project;
+        if (kind) filter.kind = kind;
+        if (status) filter.status = status;
+        sendJson(res, 200, await sdlcArtifacts(filter));
+        return;
+      }
+      const gapsMatch = /^\/api\/analysis\/gaps(\?.*)?$/.exec(url);
+      if (method === 'GET' && gapsMatch) {
+        const project = new URL(url, 'http://localhost').searchParams.get('project');
+        sendJson(res, 200, await gapAnalysis(project ?? undefined));
+        return;
+      }
+      const modMatch = /^\/api\/analysis\/modernization(\?.*)?$/.exec(url);
+      if (method === 'GET' && modMatch) {
+        const project = new URL(url, 'http://localhost').searchParams.get('project');
+        sendJson(res, 200, await modernizationAnalysis(project ?? undefined));
+        return;
+      }
+      const decMatch = /^\/api\/analysis\/decomposition(\?.*)?$/.exec(url);
+      if (method === 'GET' && decMatch) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        const project = params.get('project');
+        if (!project) {
+          sendJson(res, 400, { error: 'decomposition requires ?project=<name>' });
+          return;
+        }
+        const depthRaw = params.get('depth');
+        const depth = depthRaw ? Math.max(1, Number.parseInt(depthRaw, 10) || 1) : undefined;
+        sendJson(res, 200, await decompositionAnalysis(project, depth));
         return;
       }
       if (method === 'GET' && url === '/api/config') {
